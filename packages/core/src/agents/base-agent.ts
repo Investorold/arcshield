@@ -208,25 +208,52 @@ export abstract class BaseAgent implements Agent {
   }
 
   /**
-   * Parse JSON from response
+   * Parse JSON from response - with multiple fallback strategies
    */
   protected parseJSON<T>(response: string): T | null {
-    // Try to find JSON in the response
+    // Strategy 1: Try to find JSON in markdown code block
     const jsonMatch = response.match(/```json\n?([\s\S]*?)\n?```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : response;
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[1].trim()) as T;
+      } catch {
+        // Continue to next strategy
+      }
+    }
 
-    try {
-      return JSON.parse(jsonStr.trim()) as T;
-    } catch {
-      // Try to find raw JSON object
-      const objectMatch = response.match(/\{[\s\S]*\}/);
-      if (objectMatch) {
+    // Strategy 2: Try to find any code block
+    const codeMatch = response.match(/```\n?([\s\S]*?)\n?```/);
+    if (codeMatch) {
+      try {
+        return JSON.parse(codeMatch[1].trim()) as T;
+      } catch {
+        // Continue to next strategy
+      }
+    }
+
+    // Strategy 3: Try to find raw JSON object (greedy)
+    const objectMatch = response.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      try {
+        return JSON.parse(objectMatch[0]) as T;
+      } catch {
+        // Try to fix common JSON issues
+        let fixed = objectMatch[0]
+          .replace(/,\s*}/g, '}')  // Remove trailing commas
+          .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+          .replace(/'/g, '"');     // Replace single quotes with double quotes
         try {
-          return JSON.parse(objectMatch[0]) as T;
+          return JSON.parse(fixed) as T;
         } catch {
-          return null;
+          // Continue to next strategy
         }
       }
+    }
+
+    // Strategy 4: Try parsing the whole response
+    try {
+      return JSON.parse(response.trim()) as T;
+    } catch {
       return null;
     }
   }

@@ -117,11 +117,13 @@ export class AssessmentAgent extends BaseAgent {
         { role: 'user', content: prompt },
       ]);
 
-      // Parse the response
-      const analysis = this.parseJSON<AssessmentResult>(response);
+      // Parse the response (with fallback)
+      let analysis = this.parseJSON<AssessmentResult>(response);
 
       if (!analysis) {
-        throw new Error('Failed to parse assessment response');
+        // Fallback: Create basic assessment from file analysis
+        this.log('Using fallback assessment (AI response parsing failed)');
+        analysis = this.createFallbackAssessment(context.files, languages);
       }
 
       // Add file statistics
@@ -217,6 +219,59 @@ export class AssessmentAgent extends BaseAgent {
     return scoredFiles
       .sort((a, b) => b.score - a.score)
       .map(sf => sf.file);
+  }
+
+  /**
+   * Create fallback assessment when AI parsing fails
+   */
+  private createFallbackAssessment(files: FileContext[], languages: string): AssessmentResult {
+    // Detect app type from files
+    const hasPackageJson = files.some(f => f.path.includes('package.json'));
+    const hasSolidity = files.some(f => f.path.endsWith('.sol'));
+    const hasTypeScript = files.some(f => f.path.endsWith('.ts'));
+
+    let appType = 'Unknown';
+    if (hasSolidity) appType = 'Smart Contract Project';
+    else if (hasPackageJson && hasTypeScript) appType = 'TypeScript Application';
+    else if (hasPackageJson) appType = 'Node.js Application';
+
+    // Detect frameworks from file content
+    const frameworks: string[] = [];
+    const allContent = files.map(f => f.content).join('\n');
+    if (allContent.includes('express')) frameworks.push('Express.js');
+    if (allContent.includes('commander')) frameworks.push('Commander.js');
+    if (allContent.includes('react')) frameworks.push('React');
+    if (allContent.includes('hardhat')) frameworks.push('Hardhat');
+    if (allContent.includes('foundry')) frameworks.push('Foundry');
+
+    // Detect entry points
+    const entryPoints: string[] = [];
+    files.forEach(f => {
+      if (f.path.includes('index.') || f.path.includes('main.') || f.path.includes('app.')) {
+        entryPoints.push(f.path);
+      }
+    });
+
+    return {
+      architecture: {
+        type: appType,
+        frameworks: frameworks.length > 0 ? frameworks : ['Unknown'],
+        entryPoints: entryPoints.length > 0 ? entryPoints : ['Unknown'],
+      },
+      dataFlows: [{
+        source: 'User Input',
+        destination: 'Application',
+        dataType: 'Unknown',
+        description: 'Fallback - manual review required',
+      }],
+      authMechanisms: [],
+      externalDependencies: [],
+      sensitiveDataPaths: [],
+      securityControls: [],
+      technologies: languages.split(', ').map(l => l.split(':')[0]),
+      fileCount: files.length,
+      totalLines: 0,
+    };
   }
 
   /**

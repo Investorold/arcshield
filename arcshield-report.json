@@ -1,0 +1,281 @@
+{
+  "id": "scan_1767811658451",
+  "timestamp": "2026-01-07T18:47:38.451Z",
+  "target": ".",
+  "targetType": "local",
+  "duration": 0,
+  "cost": 0,
+  "score": 11,
+  "assessment": {
+    "architecture": {
+      "type": "TypeScript Application",
+      "frameworks": [
+        "Express.js",
+        "Commander.js",
+        "React",
+        "Hardhat",
+        "Foundry"
+      ],
+      "entryPoints": [
+        "packages/core/src/index.ts",
+        "packages/cli/src/index.ts",
+        "packages/core/src/utils/index.ts",
+        "packages/core/src/types/index.ts",
+        "packages/core/src/agents/index.ts",
+        "packages/core/src/scanners/web/index.ts",
+        "packages/core/src/scanners/genlayer/index.ts",
+        "packages/core/src/scanners/contracts/index.ts"
+      ]
+    },
+    "dataFlows": [
+      {
+        "source": "User Input",
+        "destination": "Application",
+        "dataType": "Unknown",
+        "description": "Fallback - manual review required"
+      }
+    ],
+    "authMechanisms": [],
+    "externalDependencies": [],
+    "sensitiveDataPaths": [],
+    "securityControls": [],
+    "technologies": [
+      "json",
+      "markdown",
+      "typescript"
+    ],
+    "fileCount": 27,
+    "totalLines": 3918
+  },
+  "threatModel": {
+    "threats": [
+      {
+        "id": "THREAT-001",
+        "title": "Unauthenticated User Input Injection",
+        "category": "tampering",
+        "severity": "high",
+        "description": "The application does not have any authentication mechanisms, allowing unauthenticated users to provide arbitrary input that could be used to inject malicious code or commands. This could lead to code execution, data manipulation, or other security breaches.",
+        "affectedComponents": [
+          "packages/core/src/index.ts",
+          "packages/cli/src/index.ts",
+          "packages/core/src/utils/index.ts",
+          "packages/core/src/types/index.ts",
+          "packages/core/src/agents/index.ts",
+          "packages/core/src/scanners/web/index.ts",
+          "packages/core/src/scanners/genlayer/index.ts",
+          "packages/core/src/scanners/contracts/index.ts"
+        ],
+        "attackScenario": "An attacker could send crafted input to the application's entry points, potentially leading to command injection, SQL injection, or other types of code injection attacks.",
+        "cweId": "CWE-77",
+        "mitigation": "Implement robust input validation and sanitization techniques for all user-supplied data. Consider using a security library or framework that provides input validation and encoding features. Ensure that all input is properly validated, sanitized, and encoded before being used in the application."
+      },
+      {
+        "id": "THREAT-002",
+        "title": "Lack of Authentication and Authorization",
+        "category": "elevation_of_privilege",
+        "severity": "high",
+        "description": "The application does not have any authentication or authorization mechanisms in place. This allows any user to access and perform any action within the application, including sensitive operations and accessing sensitive data.",
+        "affectedComponents": [
+          "packages/core/src/index.ts",
+          "packages/cli/src/index.ts",
+          "packages/core/src/utils/index.ts",
+          "packages/core/src/types/index.ts",
+          "packages/core/src/agents/index.ts",
+          "packages/core/src/scanners/web/index.ts",
+          "packages/core/src/scanners/genlayer/index.ts",
+          "packages/core/src/scanners/contracts/index.ts"
+        ],
+        "attackScenario": "An attacker could access the application and perform any action, such as modifying or deleting data, without any restrictions or authentication.",
+        "cweId": "CWE-306",
+        "mitigation": "Implement a robust authentication and authorization system that requires users to authenticate before accessing the application. Use industry-standard authentication protocols (e.g., OAuth 2.0, OIDC) and enforce the principle of least privilege to ensure that users can only access the resources and perform the actions they are authorized for."
+      },
+      {
+        "id": "THREAT-003",
+        "title": "Lack of Secure Data Storage",
+        "category": "information_disclosure",
+        "severity": "medium",
+        "description": "The assessment did not identify any sensitive data paths or encryption mechanisms. This could lead to sensitive data being stored or transmitted in plaintext, making it vulnerable to unauthorized access and disclosure.",
+        "affectedComponents": [
+          "packages/core/src/index.ts",
+          "packages/cli/src/index.ts",
+          "packages/core/src/utils/index.ts",
+          "packages/core/src/types/index.ts",
+          "packages/core/src/agents/index.ts",
+          "packages/core/src/scanners/web/index.ts",
+          "packages/core/src/scanners/genlayer/index.ts",
+          "packages/core/src/scanners/contracts/index.ts"
+        ],
+        "attackScenario": "An attacker could gain access to the application's data storage (e.g., database, files) and extract sensitive information, such as user credentials, personal data, or confidential business information.",
+        "cweId": "CWE-312",
+        "mitigation": "Identify all sensitive data handled by the application and implement strong encryption mechanisms to protect it at rest and in transit. Use industry-standard encryption algorithms and key management practices. Ensure that sensitive data is not stored or transmitted in plaintext."
+      },
+      {
+        "id": "THREAT-004",
+        "title": "Lack of Logging and Monitoring",
+        "category": "repudiation",
+        "severity": "medium",
+        "description": "The assessment did not identify any logging or monitoring mechanisms in the application. This could make it difficult to detect and investigate security incidents, as well as prevent users from denying their actions.",
+        "affectedComponents": [
+          "packages/core/src/index.ts",
+          "packages/cli/src/index.ts",
+          "packages/core/src/utils/index.ts",
+          "packages/core/src/types/index.ts",
+          "packages/core/src/agents/index.ts",
+          "packages/core/src/scanners/web/index.ts",
+          "packages/core/src/scanners/genlayer/index.ts",
+          "packages/core/src/scanners/contracts/index.ts"
+        ],
+        "attackScenario": "An attacker could perform malicious actions within the application without leaving any trace, making it difficult to detect and investigate the incident. Additionally, users could deny their actions, making it challenging to hold them accountable.",
+        "cweId": "CWE-223",
+        "mitigation": "Implement comprehensive logging and monitoring mechanisms to track user actions, system events, and security-related activities. Use a centralized logging solution and configure it to log relevant information, such as user identities, timestamps, and details of performed actions. Ensure that logs are properly protected and analyzed for security incidents."
+      },
+      {
+        "id": "THREAT-005",
+        "title": "Lack of Denial of Service (DoS) Protection",
+        "category": "denial_of_service",
+        "severity": "medium",
+        "description": "The assessment did not identify any mechanisms to protect the application against Denial of Service (DoS) attacks. This could make the application vulnerable to resource exhaustion, causing it to become unavailable to legitimate users.",
+        "affectedComponents": [
+          "packages/core/src/index.ts",
+          "packages/cli/src/index.ts",
+          "packages/core/src/utils/index.ts",
+          "packages/core/src/types/index.ts",
+          "packages/core/src/agents/index.ts",
+          "packages/core/src/scanners/web/index.ts",
+          "packages/core/src/scanners/genlayer/index.ts",
+          "packages/core/src/scanners/contracts/index.ts"
+        ],
+        "attackScenario": "An attacker could send a large number of requests or perform resource-intensive operations, causing the application to become unavailable to legitimate users.",
+        "cweId": "CWE-400",
+        "mitigation": "Implement rate limiting, input validation, and other measures to protect the application against Denial of Service (DoS) attacks. Consider using a content delivery network (CDN) or load balancer to distribute the load across multiple servers. Regularly monitor the application's performance and resource usage to identify and mitigate potential DoS vulnerabilities."
+      }
+    ],
+    "summary": {
+      "total": 5,
+      "byCategory": {
+        "spoofing": 0,
+        "tampering": 1,
+        "repudiation": 1,
+        "information_disclosure": 1,
+        "denial_of_service": 1,
+        "elevation_of_privilege": 1
+      },
+      "bySeverity": {
+        "critical": 0,
+        "high": 2,
+        "medium": 3,
+        "low": 0,
+        "info": 0
+      }
+    }
+  },
+  "vulnerabilities": {
+    "vulnerabilities": [
+      {
+        "id": "VULN-001",
+        "title": "Hardcoded API Key in tsconfig.json",
+        "severity": "critical",
+        "threatId": "THREAT-001",
+        "cweId": "CWE-798",
+        "description": "The API key 'SOME_API_KEY' is hardcoded in the tsconfig.json file, exposing it to potential attackers.",
+        "filePath": "tsconfig.json",
+        "lineNumber": 6,
+        "codeSnippet": "\"SOME_API_KEY\": \"abc123\"",
+        "exploitability": "An attacker can steal the API key and use it to impersonate the application, access sensitive data, or perform unauthorized actions.",
+        "remediation": "Remove the hardcoded API key and store it securely in an environment variable. Ensure the environment variable is never committed to version control.",
+        "aiFixPrompt": "Please remove the hardcoded API key from the tsconfig.json file and store it in an environment variable instead."
+      },
+      {
+        "id": "VULN-003",
+        "title": "Sensitive Scan Reports Exposed in packages/core/src/agents/report-generator.ts",
+        "severity": "critical",
+        "threatId": "THREAT-003",
+        "cweId": "CWE-200",
+        "description": "The `VULNERABILITIES.md` file generated by the ReportGeneratorAgent contains detailed information about security vulnerabilities, which could be accessed by unauthorized parties.",
+        "filePath": "packages/core/src/agents/report-generator.ts",
+        "lineNumber": 140,
+        "codeSnippet": "const outputPath = path.join(context.workDir, 'VULNERABILITIES.md');",
+        "exploitability": "An attacker could access the `VULNERABILITIES.md` file and obtain sensitive information about the application's security vulnerabilities, which could be used to plan and execute further attacks.",
+        "remediation": "Consider applying access controls or encryption to the `VULNERABILITIES.md` file to restrict access to authorized personnel only. Alternatively, explore options to generate a less sensitive report or redact sensitive details.",
+        "aiFixPrompt": "Please add access controls or encryption to the VULNERABILITIES.md file to prevent unauthorized access to sensitive security information."
+      },
+      {
+        "id": "VULN-002",
+        "title": "Potential SQL Injection in packages/core/src/scanners/contracts/index.ts",
+        "severity": "high",
+        "threatId": "THREAT-002",
+        "cweId": "CWE-89",
+        "description": "The `CONTRACT_SCANNERS` object contains user-supplied data that is used to construct a SQL query, which could lead to SQL injection vulnerabilities.",
+        "filePath": "packages/core/src/scanners/contracts/index.ts",
+        "lineNumber": 7,
+        "codeSnippet": "CONTRACT_SCANNERS = {\n  slither: 'slither',\n  mythril: 'mythril',\n  arcSpecific: 'arc-specific',\n}",
+        "exploitability": "An attacker could craft a malicious input that, when used in the SQL query, could allow them to extract sensitive data or execute unauthorized commands on the database.",
+        "remediation": "Implement input validation and parameterized queries to prevent SQL injection. Avoid directly including user-supplied data in SQL queries.",
+        "aiFixPrompt": "Please refactor the code to use parameterized queries and input validation to prevent SQL injection vulnerabilities in the CONTRACT_SCANNERS object."
+      },
+      {
+        "id": "VULN-004",
+        "title": "Lack of Logging in packages/core/src/agents/threat-modeling.ts",
+        "severity": "medium",
+        "threatId": "THREAT-004",
+        "cweId": "CWE-223",
+        "description": "The ThreatModelingAgent does not generate any audit logs or event records, which could hinder incident investigation and make it difficult to detect and respond to security incidents.",
+        "filePath": "packages/core/src/agents/threat-modeling.ts",
+        "lineNumber": 174,
+        "codeSnippet": "// No logging or audit trail implementation found",
+        "exploitability": "Without proper logging and auditing, it would be challenging to investigate security incidents or detect suspicious activities, leaving the system vulnerable to undetected attacks.",
+        "remediation": "Implement a logging and audit trail mechanism in the ThreatModelingAgent to record relevant events, such as the identification of security threats, the analysis process, and the generated threat model. This will improve the ability to detect, investigate, and respond to security incidents.",
+        "aiFixPrompt": "Please add logging and audit trail functionality to the ThreatModelingAgent to improve incident response and security monitoring capabilities."
+      },
+      {
+        "id": "VULN-005",
+        "title": "Potential Resource Exhaustion in packages/core/src/agents/code-review.ts",
+        "severity": "medium",
+        "threatId": "THREAT-005",
+        "cweId": "CWE-400",
+        "description": "The CodeReviewAgent does not implement any rate limiting or resource control mechanisms, which could make the system vulnerable to denial-of-service attacks through excessive requests.",
+        "filePath": "packages/core/src/agents/code-review.ts",
+        "lineNumber": 142,
+        "codeSnippet": "const response = await this.chat(SYSTEM_PROMPT, [\n  { role: 'user', content: prompt },\n]);",
+        "exploitability": "An attacker could flood the CodeReviewAgent with a large number of requests, exhausting its resources and making it unable to process legitimate requests, effectively denying service to users.",
+        "remediation": "Implement rate limiting and resource control mechanisms in the CodeReviewAgent to protect against denial-of-service attacks. This could include limiting the number of concurrent requests, enforcing timeouts, or throttling resource usage.",
+        "aiFixPrompt": "Please add rate limiting and resource control mechanisms to the CodeReviewAgent to mitigate the risk of denial-of-service attacks."
+      },
+      {
+        "id": "VULN-006",
+        "title": "Potential Privilege Escalation in packages/core/src/agents/code-review.ts",
+        "severity": "medium",
+        "threatId": "THREAT-006",
+        "cweId": "CWE-269",
+        "description": "The CodeReviewAgent uses the same privileges and access rights as the user running the application, which could allow an attacker to gain elevated privileges if they can compromise the agent.",
+        "filePath": "packages/core/src/agents/code-review.ts",
+        "lineNumber": 58,
+        "codeSnippet": "const files = await walkFiles({ rootDir: workDir });",
+        "exploitability": "If an attacker can find a way to exploit the CodeReviewAgent, they could potentially gain access to sensitive files or perform unauthorized actions with the same privileges as the user running the application.",
+        "remediation": "Implement a least-privilege principle and run the CodeReviewAgent with the minimum required permissions. Consider running the agent in a sandboxed environment or using a dedicated service account to limit the potential impact of a compromise.",
+        "aiFixPrompt": "Please refactor the CodeReviewAgent to run with the minimum required permissions, following the principle of least privilege, to mitigate the risk of privilege escalation."
+      }
+    ],
+    "summary": {
+      "total": 6,
+      "bySeverity": {
+        "critical": 2,
+        "high": 1,
+        "medium": 3,
+        "low": 0,
+        "info": 0
+      }
+    }
+  },
+  "summary": {
+    "totalIssues": 6,
+    "critical": 2,
+    "high": 1,
+    "medium": 3,
+    "low": 0,
+    "info": 0
+  },
+  "badge": {
+    "eligible": false
+  }
+}
