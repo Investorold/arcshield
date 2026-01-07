@@ -1,0 +1,8 @@
+{
+  "name": "vulnerable-dapp",
+  "version": "1.0.0",
+  "description": "Example vulnerable dApp for testing ArcShield scanner",
+  "scripts": {
+    "scan": "arcshield scan . --model haiku"
+  }
+}

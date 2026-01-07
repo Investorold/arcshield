@@ -1,0 +1,300 @@
+{
+  "id": "scan_1767813248979",
+  "timestamp": "2026-01-07T19:14:08.979Z",
+  "target": "/root/arcshield/examples/vulnerable-dapp",
+  "targetType": "local",
+  "duration": 0,
+  "cost": 0,
+  "score": 100,
+  "assessment": {
+    "architecture": {
+      "type": "Smart Contract",
+      "frameworks": [
+        "Solidity"
+      ],
+      "entryPoints": [
+        "deposit(uint256) in VulnerableVault.sol",
+        "withdraw(uint256) in VulnerableVault.sol",
+        "pickRandomWinner(address[]) in VulnerableVault.sol",
+        "timedWithdraw() in VulnerableVault.sol",
+        "safeTransfer(address, uint256) in VulnerableVault.sol",
+        "emergencyWithdraw() in VulnerableVault.sol",
+        "destroy() in VulnerableVault.sol",
+        "transfer(address, uint256) in UnsafeToken.sol",
+        "approve(address, uint256) in UnsafeToken.sol",
+        "transferFrom(address, address, uint256) in UnsafeToken.sol",
+        "mintRandom(address[]) in UnsafeToken.sol",
+        "airdrop(address, uint256) in UnsafeToken.sol",
+        "execute(address, bytes) in UnsafeToken.sol"
+      ]
+    },
+    "dataFlows": [
+      {
+        "source": "deposit(uint256) in VulnerableVault.sol",
+        "destination": "deposits mapping in VulnerableVault.sol",
+        "dataType": "User deposits",
+        "description": "Users can deposit USDC tokens into the contract, and the deposit amount is stored in the deposits mapping."
+      },
+      {
+        "source": "withdraw(uint256) in VulnerableVault.sol",
+        "destination": "usdc.transfer(msg.sender, amount) in VulnerableVault.sol",
+        "dataType": "User deposits",
+        "description": "Users can withdraw their deposited USDC tokens from the contract."
+      },
+      {
+        "source": "pickRandomWinner(address[]) in VulnerableVault.sol",
+        "destination": "usdc.transfer(winner, prize) in VulnerableVault.sol",
+        "dataType": "Contract balance",
+        "description": "The contract selects a random winner from the provided list of participants and transfers a portion of the contract's USDC balance as a prize."
+      },
+      {
+        "source": "timedWithdraw() in VulnerableVault.sol",
+        "destination": "usdc.transfer(msg.sender, amount) in VulnerableVault.sol",
+        "dataType": "User deposits",
+        "description": "Users can withdraw their deposited USDC tokens after a 1-day waiting period."
+      },
+      {
+        "source": "safeTransfer(address, uint256) in VulnerableVault.sol",
+        "destination": "usdc.transfer(to, amount) in VulnerableVault.sol",
+        "dataType": "Contract balance",
+        "description": "The contract owner can transfer USDC tokens from the contract to an arbitrary address."
+      },
+      {
+        "source": "emergencyWithdraw() in VulnerableVault.sol",
+        "destination": "usdc.transfer(owner, balance) in VulnerableVault.sol",
+        "dataType": "Contract balance",
+        "description": "The contract owner can withdraw all USDC tokens from the contract in an emergency."
+      },
+      {
+        "source": "transfer(address, uint256) in UnsafeToken.sol",
+        "destination": "balanceOf mapping in UnsafeToken.sol",
+        "dataType": "Token balances",
+        "description": "Users can transfer tokens to other addresses."
+      },
+      {
+        "source": "transferFrom(address, address, uint256) in UnsafeToken.sol",
+        "destination": "balanceOf and allowance mappings in UnsafeToken.sol",
+        "dataType": "Token balances and allowances",
+        "description": "Users can transfer tokens on behalf of other addresses if they have been granted allowance."
+      },
+      {
+        "source": "mintRandom(address[]) in UnsafeToken.sol",
+        "destination": "balanceOf and totalSupply in UnsafeToken.sol",
+        "dataType": "Token supply",
+        "description": "The contract owner can mint new tokens and distribute them to a list of addresses."
+      },
+      {
+        "source": "airdrop(address, uint256) in UnsafeToken.sol",
+        "destination": "balanceOf and totalSupply in UnsafeToken.sol",
+        "dataType": "Token supply",
+        "description": "The contract owner can airdrop tokens to a specific address."
+      },
+      {
+        "source": "execute(address, bytes) in UnsafeToken.sol",
+        "destination": "target.delegatecall(data) in UnsafeToken.sol",
+        "dataType": "Contract state",
+        "description": "The contract owner can execute arbitrary code on the contract using delegatecall."
+      }
+    ],
+    "authMechanisms": [
+      "Owner-based access control in VulnerableVault.sol and UnsafeToken.sol"
+    ],
+    "externalDependencies": [
+      "IERC20 interface in VulnerableVault.sol",
+      "USDC token contract address in VulnerableVault.sol"
+    ],
+    "sensitiveDataPaths": [
+      "deposits mapping in VulnerableVault.sol",
+      "balanceOf mapping in UnsafeToken.sol",
+      "allowance mapping in UnsafeToken.sol"
+    ],
+    "securityControls": [
+      "Require statements to check user input and access control in both contracts"
+    ],
+    "technologies": [
+      "Solidity",
+      "ERC20 token standard"
+    ],
+    "fileCount": 5,
+    "totalLines": 659
+  },
+  "threatModel": {
+    "threats": [
+      {
+        "id": "THREAT-001",
+        "title": "Arbitrary Token Minting and Airdropping",
+        "category": "elevation_of_privilege",
+        "severity": "critical",
+        "description": "The contract owner can mint and airdrop arbitrary amounts of tokens to any address using the `mintRandom()` and `airdrop()` functions. This allows the owner to create and distribute tokens without any restrictions, potentially leading to monetary loss and inflation of the token supply.",
+        "affectedComponents": [
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker who gains control of the contract owner's private key can mint and airdrop unlimited tokens, drastically increasing the token supply and devaluing the holdings of legitimate users.",
+        "cweId": "CWE-470: Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')",
+        "mitigation": "Remove the `mintRandom()` and `airdrop()` functions, or implement robust access control and authorization mechanisms to restrict token minting and distribution only to authorized entities."
+      },
+      {
+        "id": "THREAT-002",
+        "title": "Arbitrary Contract Execution via Delegatecall",
+        "category": "elevation_of_privilege",
+        "severity": "critical",
+        "description": "The `execute()` function in the `UnsafeToken` contract allows the contract owner to execute arbitrary code on the contract using delegatecall. This can lead to complete compromise of the contract's state and functionality, as the executed code can access and modify any part of the contract's storage and logic.",
+        "affectedComponents": [
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker who gains control of the contract owner's private key can call the `execute()` function with malicious code, allowing them to steal user funds, modify token balances, and perform other unauthorized actions.",
+        "cweId": "CWE-665: Improper Initialization",
+        "mitigation": "Remove the `execute()` function or implement robust access control and authorization mechanisms to restrict its usage only to trusted and verified code."
+      },
+      {
+        "id": "THREAT-003",
+        "title": "Lack of Input Validation in Sensitive Functions",
+        "category": "tampering",
+        "severity": "high",
+        "description": "The `withdraw()`, `timedWithdraw()`, `safeTransfer()`, and `emergencyWithdraw()` functions in the `VulnerableVault` contract do not perform sufficient input validation on the provided parameters. This can allow attackers to manipulate the function inputs and potentially steal user funds or disrupt the contract's functionality.",
+        "affectedComponents": [
+          "VulnerableVault.sol"
+        ],
+        "attackScenario": "An attacker can call the `withdraw()` function with a crafted withdrawal amount that exceeds the user's actual deposit, leading to the transfer of more funds than the user is entitled to. Similarly, the `safeTransfer()` function can be used to transfer funds to arbitrary addresses without proper authorization checks.",
+        "cweId": "CWE-20: Improper Input Validation",
+        "mitigation": "Implement robust input validation and access control checks in all sensitive functions to ensure that user inputs and actions are within the expected bounds and authorized."
+      },
+      {
+        "id": "THREAT-004",
+        "title": "Lack of Access Control for Owner-Only Functions",
+        "category": "elevation_of_privilege",
+        "severity": "high",
+        "description": "The `safeTransfer()`, `emergencyWithdraw()`, and `execute()` functions in the `VulnerableVault` and `UnsafeToken` contracts are marked as owner-only but do not have sufficient access control checks to ensure that only the contract owner can call these functions. This can allow unauthorized users to perform privileged actions, potentially leading to loss of user funds or contract compromise.",
+        "affectedComponents": [
+          "VulnerableVault.sol",
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker who gains control of an address that has been granted ownership of the contract can call the owner-only functions to transfer funds, withdraw the contract's balance, or execute arbitrary code, regardless of the intended restrictions.",
+        "cweId": "CWE-284: Improper Access Control",
+        "mitigation": "Implement robust and comprehensive access control mechanisms to ensure that only the legitimate contract owner can call the privileged functions. This can include multi-factor authentication, role-based access control, or other security measures to verify the caller's identity and authorization."
+      },
+      {
+        "id": "THREAT-005",
+        "title": "Lack of Randomness in Winner Selection",
+        "category": "tampering",
+        "severity": "medium",
+        "description": "The `pickRandomWinner()` function in the `VulnerableVault` contract uses a simple, predictable method to select a random winner from the provided list of participants. This can allow attackers to manipulate the winner selection process and increase their chances of winning the prize.",
+        "affectedComponents": [
+          "VulnerableVault.sol"
+        ],
+        "attackScenario": "An attacker can analyze the winner selection logic and the provided participant list to determine the winning address, allowing them to submit a transaction to claim the prize before the legitimate participants.",
+        "cweId": "CWE-330: Use of Insufficiently Random Values",
+        "mitigation": "Implement a more secure and unpredictable method for selecting the winner, such as using a trusted external source of randomness or a verifiable random function (VRF) to ensure the fairness and integrity of the winner selection process."
+      },
+      {
+        "id": "THREAT-006",
+        "title": "Potential Reentrancy Vulnerability in Withdrawal Functions",
+        "category": "tampering",
+        "severity": "medium",
+        "description": "The `withdraw()` and `timedWithdraw()` functions in the `VulnerableVault` contract update the user's deposit balance before transferring the funds. This can potentially lead to a reentrancy vulnerability if an attacker calls these functions in a specific way.",
+        "affectedComponents": [
+          "VulnerableVault.sol"
+        ],
+        "attackScenario": "An attacker can create a malicious contract that calls the `withdraw()` or `timedWithdraw()` functions repeatedly before the user's deposit balance is updated, allowing them to drain the contract's funds.",
+        "cweId": "CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')",
+        "mitigation": "Implement the withdrawal pattern recommended by the Checks-Effects-Interactions pattern to prevent reentrancy attacks. This involves updating the user's deposit balance before transferring the funds."
+      },
+      {
+        "id": "THREAT-007",
+        "title": "Lack of Proper Error Handling and Logging",
+        "category": "information_disclosure",
+        "severity": "medium",
+        "description": "The contracts do not implement proper error handling and logging mechanisms. Errors and exceptions may be exposed to users, potentially leaking sensitive information or revealing details about the contract's internal implementation.",
+        "affectedComponents": [
+          "VulnerableVault.sol",
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker can craft malicious inputs that trigger exceptions in the contract, leading to the exposure of error messages that may contain sensitive information or implementation details.",
+        "cweId": "CWE-209: Information Exposure Through an Error Message",
+        "mitigation": "Implement robust error handling and logging mechanisms that provide informative yet generic error messages to users, without revealing sensitive details about the contract's internal state or implementation."
+      },
+      {
+        "id": "THREAT-008",
+        "title": "Potential Denial of Service via Function Call Exhaustion",
+        "category": "denial_of_service",
+        "severity": "medium",
+        "description": "The contracts do not implement any rate limiting or throttling mechanisms for their functions. This can allow an attacker to perform a denial of service attack by repeatedly calling the functions, exhausting the gas limit and preventing legitimate users from interacting with the contract.",
+        "affectedComponents": [
+          "VulnerableVault.sol",
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker can repeatedly call the contract's functions, such as `deposit()`, `withdraw()`, or `transferFrom()`, to consume the available gas and prevent other users from executing their transactions.",
+        "cweId": "CWE-400: Uncontrolled Resource Consumption",
+        "mitigation": "Implement rate limiting or throttling mechanisms for the contract's functions to prevent a single user or address from exhausting the available gas and disrupting the contract's operation. This can include limiting the number of allowed transactions per block or time period, or requiring a small fee for each function call."
+      },
+      {
+        "id": "THREAT-009",
+        "title": "Lack of Secure Random Number Generation",
+        "category": "tampering",
+        "severity": "low",
+        "description": "The `pickRandomWinner()` function in the `VulnerableVault` contract uses a simple, predictable method to generate a random number, which can be manipulated by an attacker to predict the winning address.",
+        "affectedComponents": [
+          "VulnerableVault.sol"
+        ],
+        "attackScenario": "An attacker can analyze the random number generation logic and the provided participant list to determine the winning address, allowing them to submit a transaction to claim the prize before the legitimate participants.",
+        "cweId": "CWE-330: Use of Insufficiently Random Values",
+        "mitigation": "Implement a more secure and unpredictable method for generating random numbers, such as using a trusted external source of randomness or a verifiable random function (VRF) to ensure the fairness and integrity of the winner selection process."
+      },
+      {
+        "id": "THREAT-010",
+        "title": "Lack of Proper Token Approval Revocation",
+        "category": "tampering",
+        "severity": "medium",
+        "description": "The `UnsafeToken` contract does not provide a mechanism for users to revoke previously granted token allowances. This can allow attackers to continue using outdated allowances to transfer tokens on behalf of users, even after the users have intended to revoke the allowance.",
+        "affectedComponents": [
+          "UnsafeToken.sol"
+        ],
+        "attackScenario": "An attacker can obtain a user's token allowance and use it to transfer tokens on the user's behalf, even after the user has attempted to revoke the allowance. This can lead to the unauthorized transfer of the user's tokens.",
+        "cweId": "CWE-284: Improper Access Control",
+        "mitigation": "Implement a mechanism for users to revoke previously granted token allowances, ensuring that outdated allowances cannot be used to transfer tokens without the user's current consent."
+      }
+    ],
+    "summary": {
+      "total": 10,
+      "byCategory": {
+        "spoofing": 0,
+        "tampering": 5,
+        "repudiation": 0,
+        "information_disclosure": 1,
+        "denial_of_service": 1,
+        "elevation_of_privilege": 3
+      },
+      "bySeverity": {
+        "critical": 2,
+        "high": 2,
+        "medium": 5,
+        "low": 1,
+        "info": 0
+      }
+    }
+  },
+  "vulnerabilities": {
+    "vulnerabilities": [],
+    "summary": {
+      "total": 0,
+      "bySeverity": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0
+      }
+    }
+  },
+  "summary": {
+    "totalIssues": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "badge": {
+    "eligible": true
+  }
+}
