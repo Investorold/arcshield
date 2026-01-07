@@ -25,6 +25,7 @@ import type {
   VulnerabilityResult,
   ScanReport,
   Severity,
+  AIProvider,
 } from '../types/index.js';
 
 const SYSTEM_PROMPT = `You are a senior security consultant preparing an executive security report.
@@ -103,8 +104,8 @@ export class ReportGeneratorAgent extends BaseAgent {
   name = 'Report Generator Agent';
   description = 'Generates comprehensive security report';
 
-  constructor(model: ModelType = 'sonnet') {
-    super(model, 4096);
+  constructor(model: ModelType = 'sonnet', provider: AIProvider = 'anthropic', ollamaUrl?: string) {
+    super(model, 4096, provider, ollamaUrl);
   }
 
   async run(context: AgentContext): Promise<AgentResult> {

@@ -26,6 +26,7 @@ import type {
   Threat,
   StrideCategory,
   Severity,
+  AIProvider,
 } from '../types/index.js';
 
 const SYSTEM_PROMPT = `You are an expert security threat modeler with deep knowledge of the STRIDE framework.
@@ -134,8 +135,8 @@ export class ThreatModelingAgent extends BaseAgent {
   name = 'Threat Modeling Agent';
   description = 'Applies STRIDE framework to identify security threats';
 
-  constructor(model: ModelType = 'sonnet') {
-    super(model, 8192);
+  constructor(model: ModelType = 'sonnet', provider: AIProvider = 'anthropic', ollamaUrl?: string) {
+    super(model, 8192, provider, ollamaUrl);
   }
 
   async run(context: AgentContext): Promise<AgentResult> {

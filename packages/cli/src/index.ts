@@ -20,7 +20,9 @@ program
   .description('Scan a codebase for security vulnerabilities')
   .argument('[path]', 'Path to scan (default: current directory)', '.')
   .option('-t, --type <type>', 'Target type: local, github, contract_address', 'local')
-  .option('-m, --model <model>', 'AI model: haiku, sonnet, opus', 'sonnet')
+  .option('-p, --provider <provider>', 'AI provider: anthropic, ollama', 'anthropic')
+  .option('-m, --model <model>', 'AI model (anthropic: haiku/sonnet/opus, ollama: llama3/mistral/etc)', 'sonnet')
+  .option('--ollama-url <url>', 'Ollama server URL', 'http://localhost:11434')
   .option('-o, --output <path>', 'Output file path')
   .option('-f, --format <format>', 'Output format: json, markdown, html', 'json')
   .option('--no-contracts', 'Skip smart contract scanning')
@@ -31,7 +33,9 @@ program
       const scanner = new Scanner({
         target: targetPath,
         targetType: options.type,
+        provider: options.provider,
         model: options.model,
+        ollamaUrl: options.ollamaUrl,
         outputFormat: options.format,
         outputPath: options.output,
         includeSmartContracts: options.contracts !== false,
@@ -68,7 +72,9 @@ program
   .command('assess')
   .description('Run only the assessment phase (generates SECURITY.md)')
   .argument('[path]', 'Path to assess (default: current directory)', '.')
-  .option('-m, --model <model>', 'AI model: haiku, sonnet, opus', 'sonnet')
+  .option('-p, --provider <provider>', 'AI provider: anthropic, ollama', 'anthropic')
+  .option('-m, --model <model>', 'AI model (anthropic: haiku/sonnet/opus, ollama: llama3/mistral/etc)', 'sonnet')
+  .option('--ollama-url <url>', 'Ollama server URL', 'http://localhost:11434')
   .action(async (targetPath, options) => {
     try {
       console.log('\n🛡️  ArcShield Assessment');
@@ -76,7 +82,9 @@ program
 
       const scanner = new Scanner({
         target: targetPath,
+        provider: options.provider,
         model: options.model,
+        ollamaUrl: options.ollamaUrl,
       });
 
       const assessment = await scanner.assess();

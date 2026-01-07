@@ -25,6 +25,7 @@ import type {
   Vulnerability,
   Severity,
   FileContext,
+  AIProvider,
 } from '../types/index.js';
 
 // Load security rules
@@ -161,8 +162,8 @@ export class CodeReviewAgent extends BaseAgent {
 
   private rules: SecurityRule[] = [];
 
-  constructor(model: ModelType = 'sonnet') {
-    super(model, 16384); // Larger context for code analysis
+  constructor(model: ModelType = 'sonnet', provider: AIProvider = 'anthropic', ollamaUrl?: string) {
+    super(model, 16384, provider, ollamaUrl); // Larger context for code analysis
 
     // Load security rules
     const rulesDir = path.join(__dirname, '..', 'rules');

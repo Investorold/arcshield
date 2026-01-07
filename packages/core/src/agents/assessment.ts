@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { BaseAgent, type ModelType } from './base-agent.js';
-import type { AgentContext, AgentResult, AssessmentResult, DataFlow, FileContext } from '../types/index.js';
+import type { AgentContext, AgentResult, AssessmentResult, DataFlow, FileContext, AIProvider } from '../types/index.js';
 import { getFileSummary, getTotalLines } from '../utils/file-walker.js';
 
 const SYSTEM_PROMPT = `You are a senior security architect performing a comprehensive security assessment of a codebase.
@@ -79,8 +79,8 @@ export class AssessmentAgent extends BaseAgent {
   name = 'Assessment Agent';
   description = 'Analyzes codebase architecture and generates SECURITY.md';
 
-  constructor(model: ModelType = 'sonnet') {
-    super(model, 8192);
+  constructor(model: ModelType = 'sonnet', provider: AIProvider = 'anthropic', ollamaUrl?: string) {
+    super(model, 8192, provider, ollamaUrl);
   }
 
   async run(context: AgentContext): Promise<AgentResult> {

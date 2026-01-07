@@ -17,6 +17,13 @@ export type StrideCategory =
 // Scan target types
 export type ScanTargetType = 'github' | 'local' | 'contract_address' | 'url';
 
+// AI Provider types
+export type AIProvider = 'anthropic' | 'ollama';
+
+// Model types per provider
+export type AnthropicModel = 'haiku' | 'sonnet' | 'opus';
+export type OllamaModel = 'llama3' | 'llama3.1' | 'mistral' | 'codellama' | 'mixtral' | 'deepseek-coder';
+
 // Scan configuration
 export interface ScanConfig {
   target: string;
@@ -24,7 +31,9 @@ export interface ScanConfig {
   includeSmartContracts: boolean;
   includeWebApp: boolean;
   includeGenLayer: boolean;
-  model: 'haiku' | 'sonnet' | 'opus';
+  provider: AIProvider;
+  model: string; // AnthropicModel or OllamaModel
+  ollamaUrl?: string; // Default: http://localhost:11434
   outputFormat: 'json' | 'markdown' | 'html';
   outputPath?: string;
 }

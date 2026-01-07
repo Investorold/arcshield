@@ -38,7 +38,9 @@ export class Scanner {
       includeSmartContracts: config.includeSmartContracts ?? true,
       includeWebApp: config.includeWebApp ?? true,
       includeGenLayer: config.includeGenLayer ?? false,
+      provider: config.provider || 'anthropic',
       model: config.model || 'sonnet',
+      ollamaUrl: config.ollamaUrl || 'http://localhost:11434',
       outputFormat: config.outputFormat || 'json',
       outputPath: config.outputPath,
     };
@@ -68,9 +70,19 @@ export class Scanner {
       previousResults: {},
     };
 
+    // Show provider info
+    const providerInfo = this.config.provider === 'ollama'
+      ? `Ollama (${this.config.model})`
+      : `Claude ${this.config.model}`;
+    console.log(`   Using: ${providerInfo}`);
+
     // Step 2: Run Assessment Agent
     console.log('\n🔍 Phase 1: Assessment');
-    const assessmentAgent = new AssessmentAgent(this.config.model);
+    const assessmentAgent = new AssessmentAgent(
+      this.config.model,
+      this.config.provider,
+      this.config.ollamaUrl
+    );
     const assessmentResult = await assessmentAgent.run(context);
 
     if (!assessmentResult.success) {
@@ -82,7 +94,11 @@ export class Scanner {
 
     // Step 3: Run Threat Modeling Agent
     console.log('\n🎯 Phase 2: Threat Modeling');
-    const threatAgent = new ThreatModelingAgent(this.config.model);
+    const threatAgent = new ThreatModelingAgent(
+      this.config.model,
+      this.config.provider,
+      this.config.ollamaUrl
+    );
     const threatResult = await threatAgent.run(context);
 
     if (!threatResult.success) {
@@ -94,7 +110,11 @@ export class Scanner {
 
     // Step 4: Run Code Review Agent
     console.log('\n🔬 Phase 3: Code Review');
-    const codeReviewAgent = new CodeReviewAgent(this.config.model);
+    const codeReviewAgent = new CodeReviewAgent(
+      this.config.model,
+      this.config.provider,
+      this.config.ollamaUrl
+    );
     const codeReviewResult = await codeReviewAgent.run(context);
 
     if (!codeReviewResult.success) {
@@ -106,7 +126,11 @@ export class Scanner {
 
     // Step 5: Run Report Generator
     console.log('\n📝 Phase 4: Report Generation');
-    const reportAgent = new ReportGeneratorAgent(this.config.model);
+    const reportAgent = new ReportGeneratorAgent(
+      this.config.model,
+      this.config.provider,
+      this.config.ollamaUrl
+    );
     const reportResult = await reportAgent.run(context);
 
     if (!reportResult.success) {
@@ -178,7 +202,11 @@ export class Scanner {
       config: this.config,
     };
 
-    const agent = new AssessmentAgent(this.config.model);
+    const agent = new AssessmentAgent(
+      this.config.model,
+      this.config.provider,
+      this.config.ollamaUrl
+    );
     const result = await agent.run(context);
 
     if (!result.success) {
