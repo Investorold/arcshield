@@ -135,11 +135,27 @@ export class ReportGeneratorAgent extends BaseAgent {
         { role: 'user', content: prompt },
       ]);
 
-      // Parse the response
-      const reportData = this.parseJSON<ReportData>(response);
+      // Parse the response (with fallback)
+      let reportData = this.parseJSON<ReportData>(response);
 
       if (!reportData) {
-        throw new Error('Failed to parse report generator response');
+        // Fallback if AI response couldn't be parsed
+        this.log('Using fallback report data (AI response parsing failed)');
+        reportData = {
+          executiveSummary: `Security scan completed. Found ${vulnerabilities.summary.total} vulnerabilities (${vulnerabilities.summary.bySeverity.critical} critical, ${vulnerabilities.summary.bySeverity.high} high). Review VULNERABILITIES.md for details.`,
+          riskLevel: vulnerabilities.summary.bySeverity.critical > 0 ? 'critical' :
+                     vulnerabilities.summary.bySeverity.high > 0 ? 'high' : 'medium',
+          recommendations: [
+            {
+              priority: 1,
+              title: 'Address Critical Vulnerabilities',
+              description: 'Review and fix all critical vulnerabilities before deployment.',
+              effort: 'high',
+              impact: 'Prevents potential security breaches',
+            },
+          ],
+          complianceNotes: 'See VULNERABILITIES.md for CWE references.',
+        };
       }
 
       // Generate the final report

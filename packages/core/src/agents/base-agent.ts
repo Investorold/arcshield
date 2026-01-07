@@ -17,9 +17,9 @@ export type ModelType = string; // Now accepts any model name
 
 // Anthropic model IDs
 const ANTHROPIC_MODEL_IDS: Record<string, string> = {
-  haiku: 'claude-3-5-haiku-20241022',
-  sonnet: 'claude-sonnet-4-20250514',
-  opus: 'claude-opus-4-20250514',
+  haiku: 'claude-3-haiku-20240307',
+  sonnet: 'claude-3-sonnet-20240229',
+  opus: 'claude-3-opus-20240229',
 };
 
 // Default Ollama URL
@@ -44,13 +44,14 @@ export abstract class BaseAgent implements Agent {
 
   constructor(
     model: string = 'sonnet',
-    maxTokens: number = 8192,
+    maxTokens: number = 4096,
     provider: AIProvider = 'anthropic',
     ollamaUrl?: string
   ) {
     this.provider = provider;
     this.model = model;
-    this.maxTokens = maxTokens;
+    // Haiku has lower token limit
+    this.maxTokens = model === 'haiku' ? Math.min(maxTokens, 4096) : maxTokens;
     this.ollamaUrl = ollamaUrl || DEFAULT_OLLAMA_URL;
 
     // Only initialize Anthropic client if using that provider
