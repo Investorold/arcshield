@@ -9,6 +9,7 @@ import { walkFiles } from './utils/file-walker.js';
 import { AssessmentAgent } from './agents/assessment.js';
 import { ThreatModelingAgent } from './agents/threat-modeling.js';
 import { CodeReviewAgent } from './agents/code-review.js';
+import { ReportGeneratorAgent } from './agents/report-generator.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
 // Export types
@@ -103,8 +104,18 @@ export class Scanner {
     totalCost += codeReviewResult.cost;
     context.previousResults!.vulnerabilities = codeReviewResult.data;
 
-    // TODO: Step 5: Run Smart Contract Scanner (Phase 2)
-    // TODO: Step 6: Generate Final Report (Phase 1 continued)
+    // Step 5: Run Report Generator
+    console.log('\n📝 Phase 4: Report Generation');
+    const reportAgent = new ReportGeneratorAgent(this.config.model);
+    const reportResult = await reportAgent.run(context);
+
+    if (!reportResult.success) {
+      throw new Error(`Report generation failed: ${reportResult.error}`);
+    }
+
+    totalCost += reportResult.cost;
+
+    // TODO: Step 6: Run Smart Contract Scanner (Phase 2 - optional)
 
     const duration = Date.now() - startTime;
 
@@ -140,11 +151,16 @@ export class Scanner {
     console.log('\n✅ Security scan complete!');
     console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
     console.log(`   Cost: $${totalCost.toFixed(4)}`);
-    console.log(`   Output: ${workDir}/SECURITY.md`);
-    console.log(`   Output: ${workDir}/THREATS.md`);
-    console.log(`   Output: ${workDir}/VULNERABILITIES.md`);
-    console.log(`   Threats Found: ${report.threatModel.summary.total}`);
-    console.log(`   Vulnerabilities Found: ${report.vulnerabilities.summary.total}`);
+    console.log(`   Security Score: ${report.score}/100`);
+    console.log('');
+    console.log('📄 Generated Reports:');
+    console.log(`   ${workDir}/SECURITY.md`);
+    console.log(`   ${workDir}/THREATS.md`);
+    console.log(`   ${workDir}/VULNERABILITIES.md`);
+    console.log(`   ${workDir}/REPORT.md`);
+    console.log('');
+    console.log(`   Threats: ${report.threatModel.summary.total}`);
+    console.log(`   Vulnerabilities: ${report.vulnerabilities.summary.total}`);
 
     return report;
   }
