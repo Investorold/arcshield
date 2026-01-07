@@ -13,6 +13,7 @@
 export { BaseAgent, type ModelType, type AgentMessage } from './base-agent.js';
 export { AssessmentAgent } from './assessment.js';
 export { ThreatModelingAgent } from './threat-modeling.js';
+export { CodeReviewAgent } from './code-review.js';
 
 // Agent names for reference
 export const AGENTS = {

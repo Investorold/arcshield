@@ -8,6 +8,7 @@ import type { ScanConfig, ScanReport, AgentContext } from './types/index.js';
 import { walkFiles } from './utils/file-walker.js';
 import { AssessmentAgent } from './agents/assessment.js';
 import { ThreatModelingAgent } from './agents/threat-modeling.js';
+import { CodeReviewAgent } from './agents/code-review.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
 // Export types
@@ -90,7 +91,18 @@ export class Scanner {
     totalCost += threatResult.cost;
     context.previousResults!.threatModel = threatResult.data;
 
-    // TODO: Step 4: Run Code Review Agent (Phase 1 continued)
+    // Step 4: Run Code Review Agent
+    console.log('\n🔬 Phase 3: Code Review');
+    const codeReviewAgent = new CodeReviewAgent(this.config.model);
+    const codeReviewResult = await codeReviewAgent.run(context);
+
+    if (!codeReviewResult.success) {
+      throw new Error(`Code review failed: ${codeReviewResult.error}`);
+    }
+
+    totalCost += codeReviewResult.cost;
+    context.previousResults!.vulnerabilities = codeReviewResult.data;
+
     // TODO: Step 5: Run Smart Contract Scanner (Phase 2)
     // TODO: Step 6: Generate Final Report (Phase 1 continued)
 
@@ -107,40 +119,32 @@ export class Scanner {
       score: 0, // Will be calculated after all agents run
       assessment: assessmentResult.data as ScanReport['assessment'],
       threatModel: threatResult.data as ScanReport['threatModel'],
-      vulnerabilities: {
-        vulnerabilities: [],
-        summary: {
-          total: 0,
-          bySeverity: {
-            critical: 0,
-            high: 0,
-            medium: 0,
-            low: 0,
-            info: 0,
-          },
-        },
-      },
+      vulnerabilities: codeReviewResult.data as ScanReport['vulnerabilities'],
       summary: {
-        totalIssues: 0,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        info: 0,
+        totalIssues: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.total,
+        critical: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.critical,
+        high: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.high,
+        medium: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.medium,
+        low: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.low,
+        info: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.info,
       },
       badge: {
-        eligible: false,
-        reason: 'Scan incomplete - additional agents not yet implemented',
+        eligible: this.calculateBadgeEligibility(codeReviewResult.data as ScanReport['vulnerabilities']),
+        reason: this.getBadgeReason(codeReviewResult.data as ScanReport['vulnerabilities']),
       },
     };
 
-    console.log('\n✅ Assessment & Threat Modeling complete!');
+    // Calculate security score
+    report.score = this.calculateSecurityScore(report);
+
+    console.log('\n✅ Security scan complete!');
     console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
     console.log(`   Cost: $${totalCost.toFixed(4)}`);
     console.log(`   Output: ${workDir}/SECURITY.md`);
     console.log(`   Output: ${workDir}/THREATS.md`);
+    console.log(`   Output: ${workDir}/VULNERABILITIES.md`);
     console.log(`   Threats Found: ${report.threatModel.summary.total}`);
-    console.log('\n⚠️  Note: Code Review agent coming next!');
+    console.log(`   Vulnerabilities Found: ${report.vulnerabilities.summary.total}`);
 
     return report;
   }
@@ -173,5 +177,46 @@ export class Scanner {
    */
   getConfig(): ScanConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Calculate security score (0-100)
+   */
+  private calculateSecurityScore(report: ScanReport): number {
+    // Start with perfect score
+    let score = 100;
+
+    // Deduct points for vulnerabilities
+    const bySeverity = report.vulnerabilities.summary.bySeverity;
+    score -= bySeverity.critical * 25; // Critical = -25 each
+    score -= bySeverity.high * 15;     // High = -15 each
+    score -= bySeverity.medium * 8;    // Medium = -8 each
+    score -= bySeverity.low * 3;       // Low = -3 each
+    // Info doesn't affect score
+
+    // Ensure score is between 0 and 100
+    return Math.max(0, Math.min(100, score));
+  }
+
+  /**
+   * Check if eligible for ArcShield Verified badge
+   */
+  private calculateBadgeEligibility(vulns: ScanReport['vulnerabilities']): boolean {
+    // No critical or high vulnerabilities allowed
+    return vulns.summary.bySeverity.critical === 0 &&
+           vulns.summary.bySeverity.high === 0;
+  }
+
+  /**
+   * Get reason for badge status
+   */
+  private getBadgeReason(vulns: ScanReport['vulnerabilities']): string {
+    if (vulns.summary.bySeverity.critical > 0) {
+      return `${vulns.summary.bySeverity.critical} critical vulnerabilities must be fixed`;
+    }
+    if (vulns.summary.bySeverity.high > 0) {
+      return `${vulns.summary.bySeverity.high} high severity vulnerabilities must be fixed`;
+    }
+    return 'Meets security requirements';
   }
 }
