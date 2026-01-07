@@ -11,6 +11,7 @@ import { ThreatModelingAgent } from './agents/threat-modeling.js';
 import { CodeReviewAgent } from './agents/code-review.js';
 import { ReportGeneratorAgent } from './agents/report-generator.js';
 import { runSlither, isSlitherInstalled } from './scanners/slither.js';
+import { runArcScanner } from './scanners/arc-scanner.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
 // Export types
@@ -143,8 +144,9 @@ export class Scanner {
 
     totalCost += reportResult.cost;
 
-    // Step 6: Run Smart Contract Scanner (if enabled and Solidity files exist)
+    // Step 6: Run Smart Contract Scanners (if enabled and Solidity files exist)
     let smartContractVulns: ScanReport['smartContractVulnerabilities'] = [];
+    let arcVulns: ScanReport['arcVulnerabilities'] = [];
 
     if (this.config.includeSmartContracts) {
       const hasSolidity = context.files.some(f => f.path.endsWith('.sol'));
@@ -152,6 +154,7 @@ export class Scanner {
       if (hasSolidity) {
         console.log('\n🔗 Phase 5: Smart Contract Analysis');
 
+        // Run Slither (if installed)
         const slitherInstalled = await isSlitherInstalled();
         if (slitherInstalled) {
           console.log('[Slither] Running static analysis...');
@@ -161,6 +164,10 @@ export class Scanner {
           console.log('[Slither] Not installed - skipping');
           console.log('[Slither] Install with: pip install slither-analyzer');
         }
+
+        // Run Arc-specific scanner
+        console.log('[Arc Scanner] Checking for Arc-specific vulnerabilities...');
+        arcVulns = await runArcScanner(context.files);
       }
     }
 
@@ -179,18 +186,25 @@ export class Scanner {
       threatModel: threatResult.data as ScanReport['threatModel'],
       vulnerabilities: codeReviewResult.data as ScanReport['vulnerabilities'],
       smartContractVulnerabilities: smartContractVulns,
+      arcVulnerabilities: arcVulns,
       summary: {
-        totalIssues: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.total + smartContractVulns.length,
+        totalIssues: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.total +
+                     smartContractVulns.length + arcVulns.length,
         critical: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.critical +
-                  smartContractVulns.filter(v => v.severity === 'critical').length,
+                  smartContractVulns.filter(v => v.severity === 'critical').length +
+                  arcVulns.filter(v => v.severity === 'critical').length,
         high: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.high +
-              smartContractVulns.filter(v => v.severity === 'high').length,
+              smartContractVulns.filter(v => v.severity === 'high').length +
+              arcVulns.filter(v => v.severity === 'high').length,
         medium: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.medium +
-                smartContractVulns.filter(v => v.severity === 'medium').length,
+                smartContractVulns.filter(v => v.severity === 'medium').length +
+                arcVulns.filter(v => v.severity === 'medium').length,
         low: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.low +
-             smartContractVulns.filter(v => v.severity === 'low').length,
+             smartContractVulns.filter(v => v.severity === 'low').length +
+             arcVulns.filter(v => v.severity === 'low').length,
         info: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.info +
-              smartContractVulns.filter(v => v.severity === 'info').length,
+              smartContractVulns.filter(v => v.severity === 'info').length +
+              arcVulns.filter(v => v.severity === 'info').length,
       },
       badge: {
         eligible: this.calculateBadgeEligibility(codeReviewResult.data as ScanReport['vulnerabilities']),
