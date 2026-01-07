@@ -10,7 +10,10 @@
  * 6. Smart Contract Threat Agent - Contract-specific analysis
  */
 
-// Agents will be implemented in Phase 1
+export { BaseAgent, type ModelType, type AgentMessage } from './base-agent.js';
+export { AssessmentAgent } from './assessment.js';
+
+// Agent names for reference
 export const AGENTS = {
   assessment: 'assessment',
   threatModeling: 'threat-modeling',

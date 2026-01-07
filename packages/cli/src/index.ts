@@ -27,12 +27,6 @@ program
   .option('--no-webapp', 'Skip web app scanning')
   .option('--genlayer', 'Include GenLayer intelligent contract scanning')
   .action(async (targetPath, options) => {
-    console.log('\n🛡️  ArcShield Security Scanner v' + VERSION);
-    console.log('━'.repeat(50));
-    console.log(`\n📂 Target: ${targetPath}`);
-    console.log(`🤖 Model: ${options.model}`);
-    console.log(`📄 Format: ${options.format}\n`);
-
     try {
       const scanner = new Scanner({
         target: targetPath,
@@ -45,27 +39,61 @@ program
         includeGenLayer: options.genlayer || false,
       });
 
-      console.log('🔍 Starting scan...\n');
-
-      // TODO: Implement actual scanning
       const report = await scanner.scan();
 
-      console.log('\n✅ Scan complete!');
-      console.log(`📊 Security Score: ${report.score}/100`);
-      console.log(`🔴 Critical: ${report.summary.critical}`);
-      console.log(`🟠 High: ${report.summary.high}`);
-      console.log(`🟡 Medium: ${report.summary.medium}`);
-      console.log(`🟢 Low: ${report.summary.low}`);
+      // Output summary
+      console.log('\n📊 Scan Summary');
+      console.log('━'.repeat(50));
+      console.log(`Security Score: ${report.score}/100`);
+      console.log(`Total Issues: ${report.summary.totalIssues}`);
+      console.log(`  🔴 Critical: ${report.summary.critical}`);
+      console.log(`  🟠 High: ${report.summary.high}`);
+      console.log(`  🟡 Medium: ${report.summary.medium}`);
+      console.log(`  🟢 Low: ${report.summary.low}`);
+      console.log(`  ℹ️  Info: ${report.summary.info}`);
+
+      if (report.badge.eligible) {
+        console.log('\n🏆 Eligible for ArcShield Verified badge!');
+      } else {
+        console.log(`\n⚠️  Badge: ${report.badge.reason}`);
+      }
 
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not yet implemented')) {
-        console.log('⚠️  Scanner is not yet implemented.');
-        console.log('📝 This is the initial project setup.');
-        console.log('🚀 Implementation coming in Phase 1!\n');
-      } else {
-        console.error('❌ Error:', error);
-        process.exit(1);
-      }
+      console.error('\n❌ Error:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('assess')
+  .description('Run only the assessment phase (generates SECURITY.md)')
+  .argument('[path]', 'Path to assess (default: current directory)', '.')
+  .option('-m, --model <model>', 'AI model: haiku, sonnet, opus', 'sonnet')
+  .action(async (targetPath, options) => {
+    try {
+      console.log('\n🛡️  ArcShield Assessment');
+      console.log('━'.repeat(50));
+
+      const scanner = new Scanner({
+        target: targetPath,
+        model: options.model,
+      });
+
+      const assessment = await scanner.assess();
+
+      console.log('\n📋 Assessment Results');
+      console.log('━'.repeat(50));
+      console.log(`Application Type: ${assessment.architecture.type}`);
+      console.log(`Frameworks: ${assessment.architecture.frameworks.join(', ')}`);
+      console.log(`Entry Points: ${assessment.architecture.entryPoints.length}`);
+      console.log(`Data Flows: ${assessment.dataFlows.length}`);
+      console.log(`Auth Mechanisms: ${assessment.authMechanisms.length}`);
+      console.log(`External Dependencies: ${assessment.externalDependencies.length}`);
+      console.log('\n✅ SECURITY.md generated successfully!');
+
+    } catch (error) {
+      console.error('\n❌ Error:', error instanceof Error ? error.message : error);
+      process.exit(1);
     }
   });
 
@@ -76,7 +104,7 @@ program
   .option('-f, --format <format>', 'Output format: json, markdown, html', 'markdown')
   .action((scanId, options) => {
     console.log(`Generating ${options.format} report for scan: ${scanId}`);
-    // TODO: Implement report generation
+    console.log('⚠️  Report generation not yet implemented.');
   });
 
 program
@@ -85,7 +113,7 @@ program
   .argument('<address>', 'Contract address to verify')
   .action((address) => {
     console.log(`Verifying contract: ${address}`);
-    // TODO: Implement contract verification
+    console.log('⚠️  Contract verification not yet implemented.');
   });
 
 program.parse();
