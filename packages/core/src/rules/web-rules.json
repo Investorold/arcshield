@@ -1,0 +1,71 @@
+{
+  "$schema": "./rules-schema.json",
+  "name": "Web Application Security Rules",
+  "version": "0.1.0",
+  "rules": [
+    {
+      "id": "SEC001",
+      "name": "Hardcoded Secrets",
+      "severity": "critical",
+      "category": "secrets",
+      "description": "Detects hardcoded API keys, passwords, and secrets in source code",
+      "patterns": [
+        "api[_-]?key\\s*[=:]\\s*['\"][^'\"]+['\"]",
+        "password\\s*[=:]\\s*['\"][^'\"]+['\"]",
+        "secret\\s*[=:]\\s*['\"][^'\"]+['\"]"
+      ],
+      "cwe": "CWE-798",
+      "enabled": true
+    },
+    {
+      "id": "SEC002",
+      "name": "Secrets in Version Control",
+      "severity": "critical",
+      "category": "secrets",
+      "description": "Detects .env files or secrets committed to version control",
+      "patterns": [".env", "credentials.json", "secrets.yaml"],
+      "cwe": "CWE-798",
+      "enabled": true
+    },
+    {
+      "id": "AUTH001",
+      "name": "Plaintext Password Storage",
+      "severity": "critical",
+      "category": "authentication",
+      "description": "Detects passwords stored without proper hashing",
+      "patterns": ["password.*=.*user\\.password", "plaintext.*password"],
+      "cwe": "CWE-256",
+      "enabled": true
+    },
+    {
+      "id": "AUTH002",
+      "name": "Weak Hashing Algorithm",
+      "severity": "critical",
+      "category": "authentication",
+      "description": "Detects use of MD5 or SHA1 for password hashing",
+      "patterns": ["md5\\(", "sha1\\(", "createHash\\(['\"]md5", "createHash\\(['\"]sha1"],
+      "cwe": "CWE-327",
+      "enabled": true
+    },
+    {
+      "id": "DATA001",
+      "name": "SQL Injection",
+      "severity": "critical",
+      "category": "data",
+      "description": "Detects potential SQL injection vulnerabilities",
+      "patterns": ["query\\s*\\(.*\\+.*\\)", "execute\\s*\\(.*\\$\\{"],
+      "cwe": "CWE-89",
+      "enabled": true
+    },
+    {
+      "id": "API001",
+      "name": "Missing Authentication",
+      "severity": "critical",
+      "category": "api",
+      "description": "Detects API endpoints without authentication checks",
+      "patterns": ["app\\.(get|post|put|delete)\\s*\\([^)]*(?!auth)"],
+      "cwe": "CWE-306",
+      "enabled": true
+    }
+  ]
+}

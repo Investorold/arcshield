@@ -1,0 +1,91 @@
+{
+  "$schema": "./rules-schema.json",
+  "name": "Arc Blockchain Security Rules",
+  "version": "0.1.0",
+  "rules": [
+    {
+      "id": "ARC001",
+      "name": "Using block.prevrandao",
+      "severity": "critical",
+      "category": "randomness",
+      "description": "block.prevrandao is always 0 on Arc - do not use for randomness",
+      "patterns": ["block\\.prevrandao", "block\\.difficulty"],
+      "cwe": "CWE-330",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Use Chainlink VRF or another verifiable randomness source"
+    },
+    {
+      "id": "ARC002",
+      "name": "Hardcoded 6 Decimal Assumption",
+      "severity": "critical",
+      "category": "decimals",
+      "description": "Arc native USDC uses 18 decimals, ERC-20 interface uses 6. Mixing causes loss of funds.",
+      "patterns": ["10\\s*\\*\\*\\s*6", "1000000", "1e6"],
+      "cwe": "CWE-682",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Use decimals() to get correct precision, or explicitly handle both interfaces"
+    },
+    {
+      "id": "ARC003",
+      "name": "Strict Timestamp Comparison",
+      "severity": "high",
+      "category": "timing",
+      "description": "Multiple blocks can share same timestamp on Arc - strict comparisons may fail",
+      "patterns": ["block\\.timestamp\\s*==", "block\\.timestamp\\s*!=", "require\\s*\\(\\s*block\\.timestamp\\s*>"],
+      "cwe": "CWE-367",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Use >= or <= instead of strict equality for timestamp checks"
+    },
+    {
+      "id": "ARC004",
+      "name": "Unnecessary Confirmation Waits",
+      "severity": "low",
+      "category": "finality",
+      "description": "Arc has instant deterministic finality - no need to wait for confirmations",
+      "patterns": ["block\\.number\\s*>\\s*\\w+\\s*\\+\\s*\\d+", "confirmations", "waitForConfirmation"],
+      "cwe": null,
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Arc transactions are final immediately - single confirmation is sufficient"
+    },
+    {
+      "id": "ARC005",
+      "name": "SELFDESTRUCT in Constructor",
+      "severity": "critical",
+      "category": "deployment",
+      "description": "SELFDESTRUCT during deployment reverts on Arc if sending value to self",
+      "patterns": ["constructor[^}]*selfdestruct", "constructor[^}]*suicide"],
+      "cwe": "CWE-670",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Avoid selfdestruct in constructors, or ensure no value is sent to self"
+    },
+    {
+      "id": "ARC006",
+      "name": "Missing USDC Blocklist Handling",
+      "severity": "medium",
+      "category": "compliance",
+      "description": "Arc enforces USDC blocklists - transfers to/from blocklisted addresses revert",
+      "patterns": ["transfer\\(", "transferFrom\\("],
+      "cwe": "CWE-754",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Implement try-catch for USDC transfers to handle blocklist reverts gracefully"
+    },
+    {
+      "id": "ARC007",
+      "name": "Mixed Decimal Interface Usage",
+      "severity": "high",
+      "category": "decimals",
+      "description": "Mixing native (18 decimals) and ERC-20 (6 decimals) USDC interfaces",
+      "patterns": ["balanceOf.*msg\\.value", "transfer.*10\\*\\*18.*10\\*\\*6"],
+      "cwe": "CWE-682",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Be consistent with decimal handling - native balance is 18, ERC-20 is 6"
+    }
+  ]
+}

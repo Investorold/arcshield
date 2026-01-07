@@ -1,0 +1,79 @@
+{
+  "$schema": "./rules-schema.json",
+  "name": "GenLayer Intelligent Contract Security Rules",
+  "version": "0.1.0",
+  "rules": [
+    {
+      "id": "GL001",
+      "name": "Direct User Input to LLM",
+      "severity": "critical",
+      "category": "prompt_injection",
+      "description": "User input passed directly to LLM without sanitization - vulnerable to prompt injection",
+      "patterns": ["gl\\.llm.*user_input", "gl\\.llm.*request\\.", "gl\\.evaluate.*\\$\\{"],
+      "cwe": "CWE-77",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Sanitize all user input before passing to LLM, use greyboxing"
+    },
+    {
+      "id": "GL002",
+      "name": "Prompt Injection Patterns",
+      "severity": "critical",
+      "category": "prompt_injection",
+      "description": "Common prompt injection attack patterns detected in code",
+      "patterns": ["ignore previous", "disregard above", "new instructions", "system prompt"],
+      "cwe": "CWE-77",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Filter out known injection patterns, implement input validation"
+    },
+    {
+      "id": "GL003",
+      "name": "Missing Input Sanitization",
+      "severity": "high",
+      "category": "input_validation",
+      "description": "Input passed to intelligent contract without sanitization",
+      "patterns": ["@gl\\.public\\.write[^}]*request\\.", "def\\s+\\w+\\(.*\\):[^}]*gl\\.llm"],
+      "cwe": "CWE-20",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Implement input sanitization before all LLM calls"
+    },
+    {
+      "id": "GL004",
+      "name": "External API Without Fallback",
+      "severity": "medium",
+      "category": "external_data",
+      "description": "External API call without error handling or fallback",
+      "patterns": ["gl\\.fetch\\([^)]*\\)(?!.*try)", "requests\\.get(?!.*except)"],
+      "cwe": "CWE-755",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Wrap external API calls in try-except with fallback logic"
+    },
+    {
+      "id": "GL005",
+      "name": "Non-Deterministic Without Equivalence",
+      "severity": "high",
+      "category": "consensus",
+      "description": "Non-deterministic operation without equivalence principle handling",
+      "patterns": ["random\\.", "datetime\\.now", "time\\.time"],
+      "cwe": "CWE-330",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Use GenLayer's equivalence principle for non-deterministic operations"
+    },
+    {
+      "id": "GL006",
+      "name": "Hardcoded Manipulable Prompts",
+      "severity": "medium",
+      "category": "prompt_security",
+      "description": "Hardcoded prompts that could be manipulated through context",
+      "patterns": ["prompt\\s*=\\s*f['\"]", "gl\\.llm\\(['\"][^'\"]*\\{"],
+      "cwe": "CWE-77",
+      "enabled": true,
+      "genLayerSpecific": true,
+      "fix": "Use parameterized prompts with proper escaping"
+    }
+  ]
+}
