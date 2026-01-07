@@ -7,6 +7,7 @@ import * as path from 'path';
 import type { ScanConfig, ScanReport, AgentContext } from './types/index.js';
 import { walkFiles } from './utils/file-walker.js';
 import { AssessmentAgent } from './agents/assessment.js';
+import { ThreatModelingAgent } from './agents/threat-modeling.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
 // Export types
@@ -77,7 +78,18 @@ export class Scanner {
     totalCost += assessmentResult.cost;
     context.previousResults!.assessment = assessmentResult.data;
 
-    // TODO: Step 3: Run Threat Modeling Agent (Phase 1 continued)
+    // Step 3: Run Threat Modeling Agent
+    console.log('\n🎯 Phase 2: Threat Modeling');
+    const threatAgent = new ThreatModelingAgent(this.config.model);
+    const threatResult = await threatAgent.run(context);
+
+    if (!threatResult.success) {
+      throw new Error(`Threat modeling failed: ${threatResult.error}`);
+    }
+
+    totalCost += threatResult.cost;
+    context.previousResults!.threatModel = threatResult.data;
+
     // TODO: Step 4: Run Code Review Agent (Phase 1 continued)
     // TODO: Step 5: Run Smart Contract Scanner (Phase 2)
     // TODO: Step 6: Generate Final Report (Phase 1 continued)
@@ -94,27 +106,7 @@ export class Scanner {
       cost: totalCost,
       score: 0, // Will be calculated after all agents run
       assessment: assessmentResult.data as ScanReport['assessment'],
-      threatModel: {
-        threats: [],
-        summary: {
-          total: 0,
-          byCategory: {
-            spoofing: 0,
-            tampering: 0,
-            repudiation: 0,
-            information_disclosure: 0,
-            denial_of_service: 0,
-            elevation_of_privilege: 0,
-          },
-          bySeverity: {
-            critical: 0,
-            high: 0,
-            medium: 0,
-            low: 0,
-            info: 0,
-          },
-        },
-      },
+      threatModel: threatResult.data as ScanReport['threatModel'],
       vulnerabilities: {
         vulnerabilities: [],
         summary: {
@@ -142,11 +134,13 @@ export class Scanner {
       },
     };
 
-    console.log('\n✅ Assessment phase complete!');
+    console.log('\n✅ Assessment & Threat Modeling complete!');
     console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
     console.log(`   Cost: $${totalCost.toFixed(4)}`);
     console.log(`   Output: ${workDir}/SECURITY.md`);
-    console.log('\n⚠️  Note: Threat Modeling and Code Review agents coming next!');
+    console.log(`   Output: ${workDir}/THREATS.md`);
+    console.log(`   Threats Found: ${report.threatModel.summary.total}`);
+    console.log('\n⚠️  Note: Code Review agent coming next!');
 
     return report;
   }
