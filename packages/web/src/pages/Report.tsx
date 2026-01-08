@@ -191,29 +191,21 @@ export default function Report() {
         </div>
       </div>
 
-      {/* Threat Model - Theoretical Risks */}
+      {/* Threat Model */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <h2 className="text-lg font-semibold">Threat Model (STRIDE Analysis)</h2>
-          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Theoretical</span>
-        </div>
-        <p className="text-sm text-gray-400 mb-4 border-l-2 border-blue-500/30 pl-3">
-          These are theoretical attack scenarios based on your architecture, not actual vulnerabilities in your code.
-          Every project using similar patterns would have these same considerations.
-          Your security controls may already address these risks.
-        </p>
+        <h2 className="text-lg font-semibold mb-4">Threat Model</h2>
         <div className="space-y-3 max-h-96 overflow-y-auto">
           {scan.threatModel.threats.map((threat) => (
             <div key={threat.id} className="bg-gray-700/30 border border-gray-600/50 rounded-lg p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <span className={`text-xs px-2 py-0.5 rounded mr-2 ${
-                    threat.severity === 'critical' ? 'bg-red-500/10 text-red-400/80' :
-                    threat.severity === 'high' ? 'bg-orange-500/10 text-orange-400/80' :
-                    threat.severity === 'medium' ? 'bg-yellow-500/10 text-yellow-400/80' :
-                    'bg-green-500/10 text-green-400/80'
+                    threat.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
+                    threat.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                    threat.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-green-500/20 text-green-400'
                   }`}>
-                    {threat.severity.toUpperCase()} RISK
+                    {threat.severity.toUpperCase()}
                   </span>
                   <span className="text-xs text-gray-500">{threat.id}</span>
                 </div>
@@ -227,7 +219,7 @@ export default function Report() {
           ))}
         </div>
         {scan.threatModel.threats.length === 0 && (
-          <p className="text-gray-500 text-center py-4">No significant threat patterns identified</p>
+          <p className="text-gray-500 text-center py-4">No threats identified</p>
         )}
       </div>
 
