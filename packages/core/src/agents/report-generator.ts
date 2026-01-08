@@ -276,8 +276,10 @@ export class ReportGeneratorAgent extends BaseAgent {
     score: number
   ): string {
     const timestamp = new Date().toISOString();
+    // Badge eligibility: no critical or high vulnerabilities
     const badgeEligible = vulnerabilities.summary.bySeverity.critical === 0 &&
                           vulnerabilities.summary.bySeverity.high === 0;
+    // Note: Final badge status is recalculated in Scanner.scan() to include all vuln sources
 
     const riskEmoji: Record<string, string> = {
       critical: '🔴',

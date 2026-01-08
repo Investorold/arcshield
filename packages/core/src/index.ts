@@ -208,13 +208,17 @@ export class Scanner {
               arcVulns.filter(v => v.severity === 'info').length,
       },
       badge: {
-        eligible: this.calculateBadgeEligibility(codeReviewResult.data as ScanReport['vulnerabilities']),
-        reason: this.getBadgeReason(codeReviewResult.data as ScanReport['vulnerabilities']),
+        eligible: false, // Will be calculated after summary is complete
+        reason: '',
       },
     };
 
-    // Calculate security score
+    // Calculate security score using combined summary
     report.score = this.calculateSecurityScore(report);
+
+    // Calculate badge eligibility using combined summary
+    report.badge.eligible = this.calculateBadgeEligibility(report.summary);
+    report.badge.reason = this.getBadgeReason(report.summary);
 
     console.log('\n✅ Security scan complete!');
     console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
@@ -277,17 +281,17 @@ export class Scanner {
 
   /**
    * Calculate security score (0-100)
+   * Includes ALL vulnerabilities: code review + arc scanner + smart contracts
    */
   private calculateSecurityScore(report: ScanReport): number {
     // Start with perfect score
     let score = 100;
 
-    // Deduct points for vulnerabilities
-    const bySeverity = report.vulnerabilities.summary.bySeverity;
-    score -= bySeverity.critical * 25; // Critical = -25 each
-    score -= bySeverity.high * 15;     // High = -15 each
-    score -= bySeverity.medium * 8;    // Medium = -8 each
-    score -= bySeverity.low * 3;       // Low = -3 each
+    // Use the combined summary which includes all vulnerability sources
+    score -= report.summary.critical * 25; // Critical = -25 each
+    score -= report.summary.high * 15;     // High = -15 each
+    score -= report.summary.medium * 8;    // Medium = -8 each
+    score -= report.summary.low * 3;       // Low = -3 each
     // Info doesn't affect score
 
     // Ensure score is between 0 and 100
@@ -296,22 +300,23 @@ export class Scanner {
 
   /**
    * Check if eligible for ArcShield Verified badge
+   * Uses combined summary which includes all vulnerability sources
    */
-  private calculateBadgeEligibility(vulns: ScanReport['vulnerabilities']): boolean {
-    // No critical or high vulnerabilities allowed
-    return vulns.summary.bySeverity.critical === 0 &&
-           vulns.summary.bySeverity.high === 0;
+  private calculateBadgeEligibility(summary: ScanReport['summary']): boolean {
+    // No critical or high vulnerabilities allowed from ANY source
+    return summary.critical === 0 && summary.high === 0;
   }
 
   /**
    * Get reason for badge status
+   * Uses combined summary which includes all vulnerability sources
    */
-  private getBadgeReason(vulns: ScanReport['vulnerabilities']): string {
-    if (vulns.summary.bySeverity.critical > 0) {
-      return `${vulns.summary.bySeverity.critical} critical vulnerabilities must be fixed`;
+  private getBadgeReason(summary: ScanReport['summary']): string {
+    if (summary.critical > 0) {
+      return `${summary.critical} critical vulnerabilities must be fixed`;
     }
-    if (vulns.summary.bySeverity.high > 0) {
-      return `${vulns.summary.bySeverity.high} high severity vulnerabilities must be fixed`;
+    if (summary.high > 0) {
+      return `${summary.high} high severity vulnerabilities must be fixed`;
     }
     return 'Meets security requirements';
   }

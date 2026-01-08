@@ -148,7 +148,7 @@ export default function Report() {
                   <span className="text-xs text-gray-500">{threat.id}</span>
                 </div>
                 <span className="text-xs bg-gray-600/50 px-2 py-0.5 rounded text-gray-300">
-                  {threat.category.replace('_', ' ').toUpperCase()}
+                  {threat.category.split('_').join(' ').toUpperCase()}
                 </span>
               </div>
               <h3 className="font-medium mt-2 text-gray-200">{threat.title}</h3>
@@ -166,16 +166,6 @@ export default function Report() {
         vulnerabilities={allVulnerabilities}
         title={`Vulnerabilities (${allVulnerabilities.length})`}
       />
-
-      {/* Arc-Specific Issues */}
-      {scan.arcVulnerabilities && scan.arcVulnerabilities.length > 0 && (
-        <div className="mt-8">
-          <VulnTable
-            vulnerabilities={scan.arcVulnerabilities}
-            title={`Arc-Specific Issues (${scan.arcVulnerabilities.length})`}
-          />
-        </div>
-      )}
     </div>
   );
 }
