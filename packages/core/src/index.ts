@@ -3,6 +3,7 @@
  * Multi-Agent AI Security Scanner for Arc Ecosystem
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import type { ScanConfig, ScanReport, AgentContext } from './types/index.js';
 import { walkFiles } from './utils/file-walker.js';
@@ -225,9 +226,17 @@ export class Scanner {
     console.log(`   ${workDir}/THREATS.md`);
     console.log(`   ${workDir}/VULNERABILITIES.md`);
     console.log(`   ${workDir}/REPORT.md`);
+    console.log(`   ${workDir}/arcshield-report.json`);
     console.log('');
-    console.log(`   Threats: ${report.threatModel.summary.total}`);
-    console.log(`   Vulnerabilities: ${report.vulnerabilities.summary.total}`);
+    console.log(`   Total Issues: ${report.summary.totalIssues}`);
+    console.log(`   🔴 Critical: ${report.summary.critical}`);
+    console.log(`   🟠 High: ${report.summary.high}`);
+    console.log(`   🟡 Medium: ${report.summary.medium}`);
+    console.log(`   🟢 Low: ${report.summary.low}`);
+
+    // Write final JSON report with all results (including smart contract findings)
+    const jsonPath = path.join(workDir, 'arcshield-report.json');
+    fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf-8');
 
     return report;
   }

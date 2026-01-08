@@ -27,27 +27,24 @@ import type {
   FileContext,
   AIProvider,
 } from '../types/index.js';
+import {
+  loadAllRules,
+  loadSmartContractRules,
+  loadWebRules,
+  formatRulesForPrompt,
+  type SecurityRule as RuleType,
+} from '../rules/index.js';
 
-// Load security rules
-const loadRules = (rulesDir: string): SecurityRule[] => {
-  const rules: SecurityRule[] = [];
-  const ruleFiles = ['arc-rules.json', 'genlayer-rules.json', 'web-rules.json'];
-
-  for (const file of ruleFiles) {
-    try {
-      const filePath = path.join(rulesDir, file);
-      if (fs.existsSync(filePath)) {
-        const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        if (content.rules) {
-          rules.push(...content.rules);
-        }
-      }
-    } catch {
-      // Ignore missing rule files
-    }
+// Load security rules based on project type
+const loadRulesForProject = (hasSmartContracts: boolean, hasWebApp: boolean): RuleType[] => {
+  if (hasSmartContracts && hasWebApp) {
+    return loadAllRules();
+  } else if (hasSmartContracts) {
+    return loadSmartContractRules();
+  } else if (hasWebApp) {
+    return loadWebRules();
   }
-
-  return rules;
+  return loadAllRules();
 };
 
 interface SecurityRule {
@@ -56,9 +53,12 @@ interface SecurityRule {
   severity: Severity;
   description: string;
   pattern?: string;
-  detection: string;
-  recommendation: string;
+  patterns?: string[];
+  detection?: string;
+  recommendation?: string;
+  fix?: string;
   cweId?: string;
+  cwe?: string | null;
 }
 
 const SYSTEM_PROMPT = `You are an expert security code reviewer specializing in finding vulnerabilities in web applications, APIs, and smart contracts.
@@ -160,14 +160,19 @@ export class CodeReviewAgent extends BaseAgent {
   name = 'Code Review Agent';
   description = 'Analyzes code for security vulnerabilities';
 
-  private rules: SecurityRule[] = [];
+  private rules: RuleType[] = [];
 
   constructor(model: ModelType = 'sonnet', provider: AIProvider = 'anthropic', ollamaUrl?: string) {
     super(model, 16384, provider, ollamaUrl); // Larger context for code analysis
 
-    // Load security rules
-    const rulesDir = path.join(__dirname, '..', 'rules');
-    this.rules = loadRules(rulesDir);
+    // Load all security rules by default - will be filtered based on project type
+    this.rules = loadAllRules();
+  }
+
+  // Update rules based on project type detected during scan
+  updateRulesForProject(hasSmartContracts: boolean, hasWebApp: boolean): void {
+    this.rules = loadRulesForProject(hasSmartContracts, hasWebApp);
+    this.log(`Loaded ${this.rules.length} security rules for project type`);
   }
 
   async run(context: AgentContext): Promise<AgentResult> {
