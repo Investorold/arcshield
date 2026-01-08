@@ -9,6 +9,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "dev": "npm run dev --workspace=@arcshield/cli",
+    "dev:web": "npm run dev --workspace=@arcshield/web",
     "scan": "npm run scan --workspace=@arcshield/cli",
     "test": "npm run test --workspaces",
     "lint": "eslint packages/*/src --ext .ts",
