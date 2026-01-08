@@ -29,8 +29,8 @@ RUN npm run build --workspace=@arcshield/web
 # Production stage
 FROM node:20-slim AS runner
 
-# Install git for cloning repositories
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Install git for cloning repositories (v2)
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
