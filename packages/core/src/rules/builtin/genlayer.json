@@ -1,0 +1,228 @@
+{
+  "name": "GenLayer Intelligent Contract Rules",
+  "version": "1.0.0",
+  "description": "Security rules for GenLayer intelligent contracts",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "GL001",
+      "name": "Prompt Injection via String Concatenation",
+      "description": "User input is concatenated directly into an LLM prompt without sanitization. An attacker could inject malicious instructions to manipulate AI behavior.",
+      "severity": "critical",
+      "category": "prompt_injection",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "(?:prompt|analysis_prompt|query|message)\\s*=.*\\+\\s*(?:question|context|user_input|input|request|data)",
+          "flags": "gi",
+          "description": "String concatenation with user variable in prompt"
+        },
+        {
+          "pattern": "exec_prompt\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Direct concatenation in exec_prompt call"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "sanitize_input|sanitize\\(|escape\\(|clean_input",
+          "flags": "gi",
+          "description": "Sanitization function present"
+        }
+      ],
+      "cwe": "CWE-77",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Sanitize all user input before including in prompts. Use structured prompts with clear delimiters. Implement input validation and filtering for injection patterns.",
+      "badExample": "prompt = \"Analyze: \" + user_input\nresult = gl.nondet.exec_prompt(prompt)",
+      "goodExample": "safe_input = sanitize_input(user_input)\nprompt = f\"=== DATA ===\\n{safe_input}\\n=== END ===\"\nresult = gl.nondet.exec_prompt(prompt)",
+      "enabled": true,
+      "tags": ["llm", "ai", "injection"],
+      "confidence": "high"
+    },
+    {
+      "id": "GL002",
+      "name": "Prompt Injection via F-String",
+      "description": "F-string used in exec_prompt may include unsanitized user variables, enabling prompt injection attacks.",
+      "severity": "high",
+      "category": "prompt_injection",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "exec_prompt\\s*\\(\\s*f['\"]",
+          "flags": "gi",
+          "description": "F-string in exec_prompt call"
+        },
+        {
+          "pattern": "gl\\.nondet\\.exec_prompt\\s*\\(\\s*f['\"]",
+          "flags": "gi",
+          "description": "F-string in gl.nondet.exec_prompt"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "sanitize|escape|clean|validate",
+          "flags": "gi",
+          "description": "Sanitization in surrounding context"
+        }
+      ],
+      "cwe": "CWE-77",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Validate and sanitize all interpolated variables before prompt execution. Use explicit variable binding instead of f-strings.",
+      "enabled": true,
+      "tags": ["llm", "ai", "injection"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GL003",
+      "name": "Missing Input Sanitization in Public Function",
+      "description": "Public write function accepts user input that flows to LLM without sanitization.",
+      "severity": "high",
+      "category": "input_validation",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "@gl\\.public\\.write[\\s\\S]*?def\\s+\\w+\\s*\\([^)]*(?:input|context|question|query|data)[^)]*\\)[\\s\\S]*?exec_prompt",
+          "flags": "gim",
+          "multiline": true,
+          "description": "Public write function with user param flowing to exec_prompt"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "sanitize_input|validate_input|clean_input",
+          "flags": "gi",
+          "description": "Sanitization function called"
+        }
+      ],
+      "cwe": "CWE-20",
+      "remediation": "Add input sanitization for all user-provided parameters before using them in LLM prompts.",
+      "enabled": true,
+      "tags": ["input-validation", "llm"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GL004",
+      "name": "External API Without Error Handling",
+      "description": "External API call (web.render, gl.fetch) without try-except block may cause contract failure.",
+      "severity": "medium",
+      "category": "api_security",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "web\\.render\\s*\\(",
+          "flags": "gi",
+          "description": "web.render call"
+        },
+        {
+          "pattern": "gl\\.fetch\\s*\\(",
+          "flags": "gi",
+          "description": "gl.fetch call"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "try\\s*:",
+          "flags": "gim",
+          "description": "Inside try block"
+        }
+      ],
+      "cwe": "CWE-755",
+      "remediation": "Wrap external API calls in try-except blocks with appropriate fallback logic.",
+      "badExample": "content = web.render(url, mode=\"text\")",
+      "goodExample": "try:\n    content = web.render(url, mode=\"text\")\nexcept:\n    content = \"FETCH_FAILED\"",
+      "enabled": true,
+      "tags": ["error-handling", "external-api"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GL005",
+      "name": "Hardcoded API Keys or Secrets",
+      "description": "Hardcoded secrets in intelligent contracts are visible on-chain and can be extracted.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "(?:api_key|apikey|secret|password|token)\\s*=\\s*['\"][^'\"]{8,}['\"]",
+          "flags": "gi",
+          "description": "Hardcoded secret assignment"
+        },
+        {
+          "pattern": "sk-[a-zA-Z0-9]{20,}",
+          "flags": "g",
+          "description": "OpenAI API key pattern"
+        },
+        {
+          "pattern": "Bearer\\s+[a-zA-Z0-9\\-_.]{20,}",
+          "flags": "g",
+          "description": "Bearer token pattern"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Never hardcode secrets. Use environment variables or secure secret management.",
+      "enabled": true,
+      "tags": ["secrets", "credentials"],
+      "confidence": "high"
+    },
+    {
+      "id": "GL006",
+      "name": "Unbounded Loop in Contract",
+      "description": "Loops without bounds can exhaust gas and cause DoS.",
+      "severity": "medium",
+      "category": "dos",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "while\\s+True\\s*:",
+          "flags": "gi",
+          "description": "Infinite while loop"
+        },
+        {
+          "pattern": "for\\s+\\w+\\s+in\\s+(?:self\\.\\w+|json\\.loads)",
+          "flags": "gi",
+          "description": "Loop over unbounded storage data"
+        }
+      ],
+      "cwe": "CWE-835",
+      "remediation": "Add explicit bounds to loops. Use pagination for large data sets.",
+      "enabled": true,
+      "tags": ["dos", "gas"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GL007",
+      "name": "Unsafe JSON Parsing",
+      "description": "JSON parsing without validation can lead to crashes or unexpected behavior.",
+      "severity": "low",
+      "category": "input_validation",
+      "languages": ["python"],
+      "frameworks": ["genlayer"],
+      "patterns": [
+        {
+          "pattern": "json\\.loads\\s*\\([^)]+\\)(?!\\s*except)",
+          "flags": "gi",
+          "description": "json.loads without exception handling"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "try\\s*:[\\s\\S]*?json\\.loads",
+          "flags": "gim",
+          "description": "Inside try block"
+        }
+      ],
+      "cwe": "CWE-20",
+      "remediation": "Wrap JSON parsing in try-except blocks to handle malformed input.",
+      "enabled": true,
+      "tags": ["json", "parsing"],
+      "confidence": "low"
+    }
+  ]
+}

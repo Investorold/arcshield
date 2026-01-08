@@ -1,0 +1,270 @@
+{
+  "name": "Python Security Rules",
+  "version": "1.0.0",
+  "description": "General security rules for Python applications",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "PY001",
+      "name": "SQL Injection",
+      "description": "User input concatenated into SQL query allows attackers to execute arbitrary SQL commands.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "execute\\s*\\(\\s*['\"].*%s.*['\"]\\s*%",
+          "flags": "gi",
+          "description": "String formatting in SQL execute"
+        },
+        {
+          "pattern": "execute\\s*\\(.*\\+.*\\)",
+          "flags": "gi",
+          "description": "String concatenation in SQL execute"
+        },
+        {
+          "pattern": "cursor\\.execute\\s*\\(\\s*f['\"]",
+          "flags": "gi",
+          "description": "F-string in SQL execute"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "execute\\s*\\([^,]+,\\s*\\(",
+          "flags": "gi",
+          "description": "Parameterized query"
+        }
+      ],
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use parameterized queries with placeholders instead of string formatting.",
+      "badExample": "cursor.execute(\"SELECT * FROM users WHERE id = \" + user_id)",
+      "goodExample": "cursor.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))",
+      "enabled": true,
+      "tags": ["sql", "database"],
+      "confidence": "high"
+    },
+    {
+      "id": "PY002",
+      "name": "Command Injection",
+      "description": "User input passed to shell commands can allow arbitrary command execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "os\\.system\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in os.system"
+        },
+        {
+          "pattern": "subprocess\\.(?:call|run|Popen)\\s*\\(.*shell\\s*=\\s*True",
+          "flags": "gi",
+          "description": "subprocess with shell=True"
+        },
+        {
+          "pattern": "os\\.popen\\s*\\(",
+          "flags": "gi",
+          "description": "os.popen usage"
+        },
+        {
+          "pattern": "eval\\s*\\(",
+          "flags": "gi",
+          "description": "eval function"
+        },
+        {
+          "pattern": "exec\\s*\\(",
+          "flags": "gi",
+          "description": "exec function"
+        }
+      ],
+      "cwe": "CWE-78",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use subprocess with shell=False and pass arguments as a list. Avoid eval/exec.",
+      "badExample": "os.system(\"ping \" + user_input)",
+      "goodExample": "subprocess.run([\"ping\", user_input], shell=False)",
+      "enabled": true,
+      "tags": ["shell", "command"],
+      "confidence": "high"
+    },
+    {
+      "id": "PY003",
+      "name": "Hardcoded Credentials",
+      "description": "Credentials hardcoded in source code can be extracted and misused.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "(?:password|passwd|pwd|secret|api_key|apikey|token|auth)\\s*=\\s*['\"][^'\"]{4,}['\"]",
+          "flags": "gi",
+          "description": "Hardcoded credential assignment"
+        },
+        {
+          "pattern": "(?:AWS_ACCESS_KEY|AWS_SECRET)\\s*=\\s*['\"][^'\"]+['\"]",
+          "flags": "g",
+          "description": "Hardcoded AWS credentials"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "os\\.environ|getenv|config\\[|settings\\.",
+          "flags": "gi",
+          "description": "Environment variable usage"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Use environment variables or secure secret management systems.",
+      "enabled": true,
+      "tags": ["secrets", "credentials"],
+      "confidence": "medium"
+    },
+    {
+      "id": "PY004",
+      "name": "Insecure Deserialization",
+      "description": "Pickle/marshal deserialization of untrusted data can lead to arbitrary code execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "pickle\\.loads?\\s*\\(",
+          "flags": "gi",
+          "description": "pickle.load usage"
+        },
+        {
+          "pattern": "marshal\\.loads?\\s*\\(",
+          "flags": "gi",
+          "description": "marshal.load usage"
+        },
+        {
+          "pattern": "yaml\\.load\\s*\\([^)]*(?!Loader)",
+          "flags": "gi",
+          "description": "yaml.load without safe Loader"
+        }
+      ],
+      "cwe": "CWE-502",
+      "owasp": "A08:2021-Software and Data Integrity Failures",
+      "remediation": "Use JSON instead of pickle. If pickle is required, only deserialize trusted data.",
+      "enabled": true,
+      "tags": ["serialization", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "PY005",
+      "name": "Path Traversal",
+      "description": "User input in file paths can allow access to arbitrary files.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "open\\s*\\(.*\\+.*\\)",
+          "flags": "gi",
+          "description": "Concatenation in open()"
+        },
+        {
+          "pattern": "open\\s*\\(\\s*f['\"]",
+          "flags": "gi",
+          "description": "F-string in open()"
+        },
+        {
+          "pattern": "os\\.path\\.join\\s*\\([^)]*request",
+          "flags": "gi",
+          "description": "Request data in path"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "os\\.path\\.basename|secure_filename",
+          "flags": "gi",
+          "description": "Path sanitization"
+        }
+      ],
+      "cwe": "CWE-22",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Validate and sanitize file paths. Use os.path.basename() to remove directory components.",
+      "enabled": true,
+      "tags": ["file", "lfi"],
+      "confidence": "medium"
+    },
+    {
+      "id": "PY006",
+      "name": "Weak Cryptographic Hash",
+      "description": "MD5 and SHA1 are cryptographically weak and should not be used for security purposes.",
+      "severity": "medium",
+      "category": "cryptography",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "hashlib\\.md5\\s*\\(",
+          "flags": "gi",
+          "description": "MD5 hash usage"
+        },
+        {
+          "pattern": "hashlib\\.sha1\\s*\\(",
+          "flags": "gi",
+          "description": "SHA1 hash usage"
+        }
+      ],
+      "cwe": "CWE-328",
+      "remediation": "Use SHA-256 or stronger hash functions for security purposes.",
+      "enabled": true,
+      "tags": ["crypto", "hash"],
+      "confidence": "medium"
+    },
+    {
+      "id": "PY007",
+      "name": "Debug Mode Enabled",
+      "description": "Debug mode in production exposes sensitive information and enables code execution.",
+      "severity": "high",
+      "category": "configuration",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "DEBUG\\s*=\\s*True",
+          "flags": "gi",
+          "description": "DEBUG=True setting"
+        },
+        {
+          "pattern": "app\\.run\\s*\\([^)]*debug\\s*=\\s*True",
+          "flags": "gi",
+          "description": "Flask debug mode"
+        }
+      ],
+      "cwe": "CWE-489",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "remediation": "Disable debug mode in production environments.",
+      "enabled": true,
+      "tags": ["config", "debug"],
+      "confidence": "high"
+    },
+    {
+      "id": "PY008",
+      "name": "SSRF Vulnerability",
+      "description": "User-controlled URLs in HTTP requests can lead to Server-Side Request Forgery.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["python"],
+      "patterns": [
+        {
+          "pattern": "requests\\.(?:get|post|put|delete)\\s*\\(\\s*(?:url|request)",
+          "flags": "gi",
+          "description": "User URL in requests"
+        },
+        {
+          "pattern": "urllib\\.request\\.urlopen\\s*\\(",
+          "flags": "gi",
+          "description": "urllib.request.urlopen"
+        }
+      ],
+      "cwe": "CWE-918",
+      "owasp": "A10:2021-Server-Side Request Forgery",
+      "remediation": "Validate and whitelist allowed URLs. Block internal IP ranges.",
+      "enabled": true,
+      "tags": ["ssrf", "network"],
+      "confidence": "medium"
+    }
+  ]
+}

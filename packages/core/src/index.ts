@@ -16,6 +16,8 @@ import { runMythril, isMythrilInstalled } from './scanners/mythril.js';
 import { runArcScanner } from './scanners/arc-scanner.js';
 import { runGenLayerScanner, hasGenLayerContracts } from './scanners/genlayer/index.js';
 import { BADGE_THRESHOLD } from './constants.js';
+import { RuleEngine, initializeRuleEngine } from './rules/engine.js';
+import type { RuleEngineConfig, Rule, RuleSet } from './rules/types.js';
 
 // Export types
 export * from './types/index.js';
@@ -32,14 +34,24 @@ export * from './agents/index.js';
 // Export scanners
 export * from './scanners/index.js';
 
+// Export rules system
+export * from './rules/index.js';
+
 // Version
 export const VERSION = '0.1.0';
 
+// Extended scan config with rule engine support
+export interface ExtendedScanConfig extends ScanConfig {
+  ruleEngineConfig?: Partial<RuleEngineConfig>;
+  enableRuleEngine?: boolean;
+}
+
 // Main Scanner class
 export class Scanner {
-  private config: ScanConfig;
+  private config: ExtendedScanConfig;
+  private ruleEngine: RuleEngine | null = null;
 
-  constructor(config: Partial<ScanConfig> = {}) {
+  constructor(config: Partial<ExtendedScanConfig> = {}) {
     this.config = {
       target: config.target || '.',
       targetType: config.targetType || 'local',
@@ -51,7 +63,35 @@ export class Scanner {
       ollamaUrl: config.ollamaUrl || 'http://localhost:11434',
       outputFormat: config.outputFormat || 'json',
       outputPath: config.outputPath,
+      enableRuleEngine: config.enableRuleEngine ?? true,
+      ruleEngineConfig: config.ruleEngineConfig,
     };
+  }
+
+  /**
+   * Get the rule engine (initializes if needed)
+   */
+  async getRuleEngine(): Promise<RuleEngine> {
+    if (!this.ruleEngine) {
+      this.ruleEngine = await initializeRuleEngine(this.config.ruleEngineConfig);
+    }
+    return this.ruleEngine;
+  }
+
+  /**
+   * Get available rules
+   */
+  async getRules(): Promise<Rule[]> {
+    const engine = await this.getRuleEngine();
+    return engine.getRules();
+  }
+
+  /**
+   * Get available rule sets
+   */
+  async getRuleSets(): Promise<RuleSet[]> {
+    const engine = await this.getRuleEngine();
+    return engine.getRuleSets();
   }
 
   /**
@@ -83,6 +123,19 @@ export class Scanner {
       ? `Ollama (${this.config.model})`
       : `Claude ${this.config.model}`;
     console.log(`   Using: ${providerInfo}`);
+
+    // Step 1.5: Run Rule Engine (pattern-based scanning)
+    let ruleBasedVulns: ScanReport['vulnerabilities']['vulnerabilities'] = [];
+    if (this.config.enableRuleEngine) {
+      console.log('\n📋 Running Rule-Based Scanner...');
+      const engine = await this.getRuleEngine();
+      const stats = engine.getStats();
+      console.log(`   Loaded ${stats.total} rules across ${Object.keys(stats.byCategory).length} categories`);
+
+      const matches = engine.scan(files);
+      ruleBasedVulns = engine.toVulnerabilities(matches);
+      console.log(`   Found ${ruleBasedVulns.length} issues via pattern matching`);
+    }
 
     // Step 2: Run Assessment Agent
     console.log('\n🔍 Phase 1: Assessment');
@@ -205,6 +258,20 @@ export class Scanner {
 
     const duration = Date.now() - startTime;
 
+    // Merge code review vulnerabilities with rule-based vulnerabilities
+    const codeReviewData = codeReviewResult.data as ScanReport['vulnerabilities'];
+    const allCodeVulns = [...codeReviewData.vulnerabilities, ...ruleBasedVulns];
+
+    // Deduplicate by file+line (prefer rule-based as they're more specific)
+    const vulnMap = new Map<string, typeof allCodeVulns[0]>();
+    for (const vuln of allCodeVulns) {
+      const key = `${vuln.filePath}:${vuln.lineNumber}`;
+      if (!vulnMap.has(key)) {
+        vulnMap.set(key, vuln);
+      }
+    }
+    const deduplicatedVulns = Array.from(vulnMap.values());
+
     // Create placeholder report
     const report: ScanReport = {
       id: `scan_${Date.now()}`,
@@ -216,30 +283,44 @@ export class Scanner {
       score: 0, // Will be calculated after all agents run
       assessment: assessmentResult.data as ScanReport['assessment'],
       threatModel: threatResult.data as ScanReport['threatModel'],
-      vulnerabilities: codeReviewResult.data as ScanReport['vulnerabilities'],
+      vulnerabilities: {
+        ...codeReviewData,
+        vulnerabilities: deduplicatedVulns,
+        summary: {
+          ...codeReviewData.summary,
+          total: deduplicatedVulns.length,
+          bySeverity: {
+            critical: deduplicatedVulns.filter(v => v.severity === 'critical').length,
+            high: deduplicatedVulns.filter(v => v.severity === 'high').length,
+            medium: deduplicatedVulns.filter(v => v.severity === 'medium').length,
+            low: deduplicatedVulns.filter(v => v.severity === 'low').length,
+            info: deduplicatedVulns.filter(v => v.severity === 'info').length,
+          },
+        },
+      },
       smartContractVulnerabilities: smartContractVulns,
       arcVulnerabilities: arcVulns,
       genLayerVulnerabilities: genLayerVulns,
       summary: {
-        totalIssues: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.total +
+        totalIssues: deduplicatedVulns.length +
                      smartContractVulns.length + arcVulns.length + genLayerVulns.length,
-        critical: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.critical +
+        critical: deduplicatedVulns.filter(v => v.severity === 'critical').length +
                   smartContractVulns.filter(v => v.severity === 'critical').length +
                   arcVulns.filter(v => v.severity === 'critical').length +
                   genLayerVulns.filter(v => v.severity === 'critical').length,
-        high: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.high +
+        high: deduplicatedVulns.filter(v => v.severity === 'high').length +
               smartContractVulns.filter(v => v.severity === 'high').length +
               arcVulns.filter(v => v.severity === 'high').length +
               genLayerVulns.filter(v => v.severity === 'high').length,
-        medium: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.medium +
+        medium: deduplicatedVulns.filter(v => v.severity === 'medium').length +
                 smartContractVulns.filter(v => v.severity === 'medium').length +
                 arcVulns.filter(v => v.severity === 'medium').length +
                 genLayerVulns.filter(v => v.severity === 'medium').length,
-        low: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.low +
+        low: deduplicatedVulns.filter(v => v.severity === 'low').length +
              smartContractVulns.filter(v => v.severity === 'low').length +
              arcVulns.filter(v => v.severity === 'low').length +
              genLayerVulns.filter(v => v.severity === 'low').length,
-        info: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.info +
+        info: deduplicatedVulns.filter(v => v.severity === 'info').length +
               smartContractVulns.filter(v => v.severity === 'info').length +
               arcVulns.filter(v => v.severity === 'info').length +
               genLayerVulns.filter(v => v.severity === 'info').length,

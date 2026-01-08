@@ -5,8 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
-import { Scanner } from '@arcshield/core';
-import type { ScanReport } from '@arcshield/core';
+import { Scanner, initializeRuleEngine, type RuleEngineConfig } from '@arcshield/core';
+import type { ScanReport, Rule, RuleSet } from '@arcshield/core';
 import { cloneGitHubRepo, parseGitHubUrl } from './github.js';
 import { handleUpload } from './upload.js';
 import {
@@ -911,6 +911,161 @@ app.get('/api/badge/:id/embed', (req, res) => {
   } catch (error) {
     console.error('Error getting embed code:', error);
     res.status(500).json({ error: 'Failed to get embed code' });
+  }
+});
+
+// ==========================================
+// Rules API - Rule Management
+// ==========================================
+
+// Singleton rule engine
+let ruleEngine: Awaited<ReturnType<typeof initializeRuleEngine>> | null = null;
+
+async function getRuleEngine() {
+  if (!ruleEngine) {
+    ruleEngine = await initializeRuleEngine();
+  }
+  return ruleEngine;
+}
+
+// GET /api/rules - Get all loaded rules
+app.get('/api/rules', async (_req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const rules = engine.getRules();
+    res.json({
+      success: true,
+      count: rules.length,
+      rules,
+    });
+  } catch (error) {
+    console.error('Error getting rules:', error);
+    res.status(500).json({ error: 'Failed to load rules' });
+  }
+});
+
+// GET /api/rules/stats - Get rule statistics
+app.get('/api/rules/stats', async (_req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const stats = engine.getStats();
+    res.json({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    console.error('Error getting rule stats:', error);
+    res.status(500).json({ error: 'Failed to get rule stats' });
+  }
+});
+
+// GET /api/rulesets - Get all rule sets
+app.get('/api/rulesets', async (_req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const ruleSets = engine.getRuleSets();
+    res.json({
+      success: true,
+      count: ruleSets.length,
+      ruleSets: ruleSets.map(rs => ({
+        name: rs.name,
+        version: rs.version,
+        description: rs.description,
+        author: rs.author,
+        ruleCount: rs.rules.length,
+      })),
+    });
+  } catch (error) {
+    console.error('Error getting rule sets:', error);
+    res.status(500).json({ error: 'Failed to load rule sets' });
+  }
+});
+
+// GET /api/rules/:id - Get a specific rule
+app.get('/api/rules/:id', async (req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const rule = engine.getRule(req.params.id);
+    if (!rule) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    res.json({
+      success: true,
+      rule,
+    });
+  } catch (error) {
+    console.error('Error getting rule:', error);
+    res.status(500).json({ error: 'Failed to get rule' });
+  }
+});
+
+// GET /api/rules/category/:category - Get rules by category
+app.get('/api/rules/category/:category', async (req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const rules = engine.getRulesByCategory(req.params.category as any);
+    res.json({
+      success: true,
+      category: req.params.category,
+      count: rules.length,
+      rules,
+    });
+  } catch (error) {
+    console.error('Error getting rules by category:', error);
+    res.status(500).json({ error: 'Failed to get rules' });
+  }
+});
+
+// GET /api/rules/severity/:severity - Get rules by severity
+app.get('/api/rules/severity/:severity', async (req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const rules = engine.getRulesBySeverity(req.params.severity as any);
+    res.json({
+      success: true,
+      severity: req.params.severity,
+      count: rules.length,
+      rules,
+    });
+  } catch (error) {
+    console.error('Error getting rules by severity:', error);
+    res.status(500).json({ error: 'Failed to get rules' });
+  }
+});
+
+// POST /api/rules/:id/enable - Enable a rule
+app.post('/api/rules/:id/enable', async (req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const success = engine.enableRule(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    res.json({
+      success: true,
+      message: `Rule ${req.params.id} enabled`,
+    });
+  } catch (error) {
+    console.error('Error enabling rule:', error);
+    res.status(500).json({ error: 'Failed to enable rule' });
+  }
+});
+
+// POST /api/rules/:id/disable - Disable a rule
+app.post('/api/rules/:id/disable', async (req, res) => {
+  try {
+    const engine = await getRuleEngine();
+    const success = engine.disableRule(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    res.json({
+      success: true,
+      message: `Rule ${req.params.id} disabled`,
+    });
+  } catch (error) {
+    console.error('Error disabling rule:', error);
+    res.status(500).json({ error: 'Failed to disable rule' });
   }
 });
 

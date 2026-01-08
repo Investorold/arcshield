@@ -1,0 +1,262 @@
+{
+  "name": "Solidity Smart Contract Rules",
+  "version": "1.0.0",
+  "description": "Security rules for Solidity smart contracts",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "SOL001",
+      "name": "Reentrancy Vulnerability",
+      "description": "External calls before state updates allow attackers to re-enter and drain funds.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "\\.call\\{value.*\\}\\s*\\([^)]*\\)[\\s\\S]*?(?:balance|amount|value)\\s*[-=]",
+          "flags": "gim",
+          "multiline": true,
+          "description": "Call before state update"
+        },
+        {
+          "pattern": "\\.transfer\\s*\\([^)]+\\)[\\s\\S]*?(?:balance|amount)\\s*[-=]",
+          "flags": "gim",
+          "multiline": true,
+          "description": "Transfer before state update"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "nonReentrant|ReentrancyGuard",
+          "flags": "gi",
+          "description": "Reentrancy guard present"
+        }
+      ],
+      "cwe": "CWE-841",
+      "remediation": "Follow Checks-Effects-Interactions pattern. Update state before external calls. Use ReentrancyGuard.",
+      "badExample": "recipient.call{value: amount}(\"\");\nbalances[msg.sender] -= amount;",
+      "goodExample": "balances[msg.sender] -= amount;\nrecipient.call{value: amount}(\"\");",
+      "enabled": true,
+      "tags": ["reentrancy", "defi"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL002",
+      "name": "Unchecked External Call",
+      "description": "Return value of external call not checked, may silently fail.",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "\\.call\\{[^}]*\\}\\s*\\([^)]*\\)\\s*;",
+          "flags": "gi",
+          "description": "Unchecked call return value"
+        },
+        {
+          "pattern": "\\.send\\s*\\([^)]+\\)\\s*;",
+          "flags": "gi",
+          "description": "Unchecked send return value"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\(bool\\s+\\w+,|require\\(|if\\s*\\(",
+          "flags": "gi",
+          "description": "Return value checked"
+        }
+      ],
+      "cwe": "CWE-252",
+      "remediation": "Always check return values: (bool success, ) = addr.call{value: amount}(\"\"); require(success);",
+      "enabled": true,
+      "tags": ["call", "return-value"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL003",
+      "name": "Integer Overflow/Underflow",
+      "description": "Arithmetic operations without SafeMath can overflow in Solidity < 0.8.0.",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "pragma\\s+solidity\\s+[\\^~]?0\\.[0-7]\\.",
+          "flags": "gi",
+          "description": "Solidity version < 0.8.0"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "SafeMath|using\\s+SafeMath",
+          "flags": "gi",
+          "description": "SafeMath library used"
+        }
+      ],
+      "cwe": "CWE-190",
+      "remediation": "Use Solidity 0.8.0+ or OpenZeppelin SafeMath library.",
+      "enabled": true,
+      "tags": ["overflow", "math"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL004",
+      "name": "tx.origin Authentication",
+      "description": "Using tx.origin for authentication is vulnerable to phishing attacks.",
+      "severity": "high",
+      "category": "authentication",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "tx\\.origin",
+          "flags": "gi",
+          "description": "tx.origin usage"
+        }
+      ],
+      "cwe": "CWE-284",
+      "remediation": "Use msg.sender instead of tx.origin for authentication.",
+      "badExample": "require(tx.origin == owner);",
+      "goodExample": "require(msg.sender == owner);",
+      "enabled": true,
+      "tags": ["auth", "phishing"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL005",
+      "name": "Unprotected Self-Destruct",
+      "description": "selfdestruct without proper access control allows anyone to destroy the contract.",
+      "severity": "critical",
+      "category": "authorization",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "selfdestruct\\s*\\(",
+          "flags": "gi",
+          "description": "selfdestruct usage"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "onlyOwner|require\\s*\\(\\s*msg\\.sender\\s*==",
+          "flags": "gi",
+          "description": "Access control present"
+        }
+      ],
+      "cwe": "CWE-284",
+      "remediation": "Add proper access control modifiers to selfdestruct functions.",
+      "enabled": true,
+      "tags": ["selfdestruct", "access-control"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL006",
+      "name": "Floating Pragma",
+      "description": "Floating pragma allows compilation with different versions, risking inconsistency.",
+      "severity": "low",
+      "category": "configuration",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "pragma\\s+solidity\\s+\\^",
+          "flags": "gi",
+          "description": "Floating pragma with ^"
+        },
+        {
+          "pattern": "pragma\\s+solidity\\s+>=",
+          "flags": "gi",
+          "description": "Floating pragma with >="
+        }
+      ],
+      "cwe": "CWE-1104",
+      "remediation": "Lock pragma to specific version: pragma solidity 0.8.19;",
+      "enabled": true,
+      "tags": ["pragma", "version"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL007",
+      "name": "Uninitialized Storage Pointer",
+      "description": "Uninitialized local storage variables point to slot 0 and can corrupt state.",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "\\w+\\s+storage\\s+\\w+\\s*;",
+          "flags": "gi",
+          "description": "Uninitialized storage pointer"
+        }
+      ],
+      "cwe": "CWE-824",
+      "remediation": "Always initialize storage pointers or use memory keyword.",
+      "enabled": true,
+      "tags": ["storage", "memory"],
+      "confidence": "medium"
+    },
+    {
+      "id": "SOL008",
+      "name": "Timestamp Dependency",
+      "description": "Block timestamp can be manipulated by miners within ~15 seconds.",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "block\\.timestamp",
+          "flags": "gi",
+          "description": "block.timestamp usage"
+        },
+        {
+          "pattern": "\\bnow\\b",
+          "flags": "gi",
+          "description": "now keyword (deprecated alias)"
+        }
+      ],
+      "cwe": "CWE-829",
+      "remediation": "Don't rely on block.timestamp for critical logic. Allow tolerance for time-based conditions.",
+      "enabled": true,
+      "tags": ["timestamp", "randomness"],
+      "confidence": "low"
+    },
+    {
+      "id": "SOL009",
+      "name": "Delegatecall to Untrusted Contract",
+      "description": "Delegatecall executes code in caller's context, allowing storage manipulation.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "\\.delegatecall\\s*\\(",
+          "flags": "gi",
+          "description": "delegatecall usage"
+        }
+      ],
+      "cwe": "CWE-829",
+      "remediation": "Only delegatecall to trusted, audited contracts. Validate target addresses.",
+      "enabled": true,
+      "tags": ["delegatecall", "proxy"],
+      "confidence": "high"
+    },
+    {
+      "id": "SOL010",
+      "name": "Front-Running Vulnerability",
+      "description": "Predictable transaction outcomes can be exploited by front-running bots.",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "function\\s+\\w*(?:swap|trade|buy|sell|bid|offer)\\w*\\s*\\(",
+          "flags": "gi",
+          "description": "Trading function pattern"
+        }
+      ],
+      "cwe": "CWE-362",
+      "remediation": "Use commit-reveal schemes, submarine sends, or private mempools.",
+      "enabled": true,
+      "tags": ["mev", "frontrunning"],
+      "confidence": "low"
+    }
+  ]
+}

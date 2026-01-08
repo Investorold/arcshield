@@ -1,0 +1,347 @@
+{
+  "name": "JavaScript/TypeScript Security Rules",
+  "version": "1.0.0",
+  "description": "Security rules for JavaScript and TypeScript applications",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "JS001",
+      "name": "Cross-Site Scripting (XSS)",
+      "description": "User input rendered without sanitization can execute malicious scripts.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "innerHTML\\s*=",
+          "flags": "gi",
+          "description": "innerHTML assignment"
+        },
+        {
+          "pattern": "document\\.write\\s*\\(",
+          "flags": "gi",
+          "description": "document.write usage"
+        },
+        {
+          "pattern": "dangerouslySetInnerHTML",
+          "flags": "gi",
+          "description": "React dangerouslySetInnerHTML"
+        },
+        {
+          "pattern": "\\$\\([^)]+\\)\\.html\\s*\\(",
+          "flags": "gi",
+          "description": "jQuery .html() method"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "DOMPurify|sanitize|escape",
+          "flags": "gi",
+          "description": "Sanitization library"
+        }
+      ],
+      "cwe": "CWE-79",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use textContent instead of innerHTML, or sanitize with DOMPurify.",
+      "badExample": "element.innerHTML = userInput",
+      "goodExample": "element.textContent = userInput",
+      "enabled": true,
+      "tags": ["xss", "dom"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JS002",
+      "name": "Eval Injection",
+      "description": "Using eval() with user input allows arbitrary code execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "\\beval\\s*\\(",
+          "flags": "gi",
+          "description": "eval() usage"
+        },
+        {
+          "pattern": "new\\s+Function\\s*\\(",
+          "flags": "gi",
+          "description": "new Function() constructor"
+        },
+        {
+          "pattern": "setTimeout\\s*\\(\\s*['\"`]",
+          "flags": "gi",
+          "description": "setTimeout with string"
+        },
+        {
+          "pattern": "setInterval\\s*\\(\\s*['\"`]",
+          "flags": "gi",
+          "description": "setInterval with string"
+        }
+      ],
+      "cwe": "CWE-94",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Avoid eval(). Use JSON.parse() for data, or safer alternatives.",
+      "enabled": true,
+      "tags": ["eval", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "JS003",
+      "name": "SQL Injection",
+      "description": "User input in SQL queries allows database manipulation.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "query\\s*\\(\\s*`[^`]*\\$\\{",
+          "flags": "gi",
+          "description": "Template literal in SQL query"
+        },
+        {
+          "pattern": "query\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in SQL query"
+        },
+        {
+          "pattern": "execute\\s*\\(\\s*['\"]SELECT.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in execute"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\?|\\$\\d|:w+",
+          "flags": "gi",
+          "description": "Parameterized query"
+        }
+      ],
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use parameterized queries or an ORM.",
+      "badExample": "db.query(`SELECT * FROM users WHERE id = ${userId}`)",
+      "goodExample": "db.query('SELECT * FROM users WHERE id = ?', [userId])",
+      "enabled": true,
+      "tags": ["sql", "database"],
+      "confidence": "high"
+    },
+    {
+      "id": "JS004",
+      "name": "Hardcoded Secrets",
+      "description": "API keys and secrets in code can be extracted from client bundles.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "(?:api_?key|apiKey|secret|password|token|auth)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]",
+          "flags": "gi",
+          "description": "Hardcoded secret"
+        },
+        {
+          "pattern": "sk-[a-zA-Z0-9]{20,}",
+          "flags": "g",
+          "description": "OpenAI API key"
+        },
+        {
+          "pattern": "AKIA[0-9A-Z]{16}",
+          "flags": "g",
+          "description": "AWS Access Key ID"
+        },
+        {
+          "pattern": "ghp_[a-zA-Z0-9]{36}",
+          "flags": "g",
+          "description": "GitHub Personal Access Token"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "process\\.env|import\\.meta\\.env",
+          "flags": "gi",
+          "description": "Environment variable"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Use environment variables. Never commit secrets to repositories.",
+      "enabled": true,
+      "tags": ["secrets", "credentials"],
+      "confidence": "high"
+    },
+    {
+      "id": "JS005",
+      "name": "Prototype Pollution",
+      "description": "Object property assignment without validation can pollute Object.prototype.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "\\[\\s*['\"]__proto__['\"]\\s*\\]",
+          "flags": "gi",
+          "description": "__proto__ access"
+        },
+        {
+          "pattern": "\\.constructor\\.prototype",
+          "flags": "gi",
+          "description": "constructor.prototype access"
+        },
+        {
+          "pattern": "Object\\.assign\\s*\\([^,]+,\\s*(?:req|request|body|params)",
+          "flags": "gi",
+          "description": "Object.assign with user input"
+        }
+      ],
+      "cwe": "CWE-1321",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Validate object keys. Use Object.create(null) for dictionaries.",
+      "enabled": true,
+      "tags": ["prototype", "pollution"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JS006",
+      "name": "Insecure Randomness",
+      "description": "Math.random() is not cryptographically secure.",
+      "severity": "medium",
+      "category": "cryptography",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "Math\\.random\\s*\\(",
+          "flags": "gi",
+          "description": "Math.random() usage"
+        }
+      ],
+      "cwe": "CWE-338",
+      "remediation": "Use crypto.getRandomValues() or crypto.randomBytes() for security-sensitive random values.",
+      "enabled": true,
+      "tags": ["random", "crypto"],
+      "confidence": "low"
+    },
+    {
+      "id": "JS007",
+      "name": "Command Injection",
+      "description": "User input in shell commands allows arbitrary command execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "exec\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in exec"
+        },
+        {
+          "pattern": "execSync\\s*\\(.*\\$\\{",
+          "flags": "gi",
+          "description": "Template literal in execSync"
+        },
+        {
+          "pattern": "spawn\\s*\\([^,]+,.*shell\\s*:\\s*true",
+          "flags": "gi",
+          "description": "spawn with shell:true"
+        }
+      ],
+      "cwe": "CWE-78",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use spawn() with shell:false and pass arguments as array.",
+      "enabled": true,
+      "tags": ["shell", "command"],
+      "confidence": "high"
+    },
+    {
+      "id": "JS008",
+      "name": "Path Traversal",
+      "description": "User input in file paths can access files outside intended directory.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "readFile(?:Sync)?\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in readFile"
+        },
+        {
+          "pattern": "readFile(?:Sync)?\\s*\\(\\s*`[^`]*\\$\\{",
+          "flags": "gi",
+          "description": "Template literal in readFile"
+        },
+        {
+          "pattern": "path\\.join\\s*\\([^)]*req\\.",
+          "flags": "gi",
+          "description": "Request data in path.join"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "path\\.basename|sanitize",
+          "flags": "gi",
+          "description": "Path sanitization"
+        }
+      ],
+      "cwe": "CWE-22",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Validate paths and use path.basename() to prevent directory traversal.",
+      "enabled": true,
+      "tags": ["file", "lfi"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JS009",
+      "name": "Missing CSRF Protection",
+      "description": "State-changing endpoints without CSRF tokens are vulnerable to cross-site attacks.",
+      "severity": "medium",
+      "category": "authentication",
+      "languages": ["javascript", "typescript"],
+      "frameworks": ["express"],
+      "patterns": [
+        {
+          "pattern": "app\\.post\\s*\\([^)]+(?!csrf|_csrf)",
+          "flags": "gi",
+          "description": "POST endpoint without CSRF check"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "csurf|csrf|_token",
+          "flags": "gi",
+          "description": "CSRF middleware"
+        }
+      ],
+      "cwe": "CWE-352",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Use CSRF tokens for state-changing operations.",
+      "enabled": true,
+      "tags": ["csrf", "web"],
+      "confidence": "low"
+    },
+    {
+      "id": "JS010",
+      "name": "Open Redirect",
+      "description": "User-controlled redirect URLs can be used for phishing attacks.",
+      "severity": "medium",
+      "category": "injection",
+      "languages": ["javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "res\\.redirect\\s*\\(\\s*req\\.",
+          "flags": "gi",
+          "description": "Redirect with request data"
+        },
+        {
+          "pattern": "window\\.location\\s*=\\s*(?:params|query|search)",
+          "flags": "gi",
+          "description": "Location from URL params"
+        }
+      ],
+      "cwe": "CWE-601",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Validate redirect URLs against a whitelist of allowed domains.",
+      "enabled": true,
+      "tags": ["redirect", "phishing"],
+      "confidence": "medium"
+    }
+  ]
+}
