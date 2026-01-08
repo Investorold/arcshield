@@ -389,6 +389,7 @@ async function runGitHubScan(
       model,
       provider: provider as 'anthropic' | 'ollama',
       outputFormat: 'json',
+      includeGenLayer: true,
     });
 
     const report = await scanner.scan();
@@ -458,6 +459,7 @@ async function runUploadScan(
       model,
       provider: provider as 'anthropic' | 'ollama',
       outputFormat: 'json',
+      includeGenLayer: true,
     });
 
     const report = await scanner.scan();
@@ -716,6 +718,7 @@ async function runAuthenticatedGitHubScan(
       model,
       provider: provider as 'anthropic' | 'ollama',
       outputFormat: 'json',
+      includeGenLayer: true,
     });
 
     const report = await scanner.scan();
