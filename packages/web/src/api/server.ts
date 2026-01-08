@@ -26,6 +26,7 @@ import {
 
 const app = express();
 const PORT = process.env.PORT || 3501;
+const FRONTEND_URL = process.env.FRONTEND_URL || '${FRONTEND_URL}';
 
 // In-memory session storage (use Redis in production)
 const sessions: Map<string, {
@@ -538,7 +539,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
     const { code } = req.query;
 
     if (!code || typeof code !== 'string') {
-      return res.redirect('http://localhost:3500/scan?error=no_code');
+      return res.redirect('${FRONTEND_URL}/scan?error=no_code');
     }
 
     // Exchange code for token
@@ -554,10 +555,10 @@ app.get('/api/auth/github/callback', async (req, res) => {
     sessions.set(sessionId, { accessToken, user });
 
     // Redirect to frontend with session ID
-    res.redirect(`http://localhost:3500/scan?session=${sessionId}`);
+    res.redirect(`${FRONTEND_URL}/scan?session=${sessionId}`);
   } catch (error) {
     console.error('OAuth callback error:', error);
-    res.redirect(`http://localhost:3500/scan?error=${encodeURIComponent(error instanceof Error ? error.message : 'auth_failed')}`);
+    res.redirect(`${FRONTEND_URL}/scan?error=${encodeURIComponent(error instanceof Error ? error.message : 'auth_failed')}`);
   }
 });
 
@@ -915,8 +916,30 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ==========================================
+// Production Static File Serving
+// ==========================================
+
+// In production, serve the built React app
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(import.meta.dirname, '../../dist');
+
+  // Serve static files
+  app.use(express.static(distPath));
+
+  // SPA fallback - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+
+  console.log(`Serving static files from: ${distPath}`);
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`ArcShield API server running on http://localhost:${PORT}`);
   console.log(`Scans directory: ${SCANS_DIR}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
