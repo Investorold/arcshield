@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "start": "npm run start --workspace=@arcshield/web",
     "dev": "npm run dev --workspace=@arcshield/cli",
     "dev:web": "npm run dev --workspace=@arcshield/web",
     "scan": "npm run scan --workspace=@arcshield/cli",
