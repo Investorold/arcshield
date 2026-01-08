@@ -308,9 +308,9 @@ function findExternalApiIssues(
 
     // Check for web.render without proper error handling
     if (line.includes('web.render') || line.includes('gl.fetch')) {
-      // Look for try block
+      // Look for try block (check up to 20 lines back for nested code)
       let hasTry = false;
-      for (let j = Math.max(0, i - 5); j < i; j++) {
+      for (let j = Math.max(0, i - 20); j < i; j++) {
         if (lines[j].includes('try:')) {
           hasTry = true;
           break;
