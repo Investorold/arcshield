@@ -363,7 +363,8 @@ export async function runGenLayerScanner(
 
   for (const file of pythonFiles) {
     try {
-      const content = fs.readFileSync(file.path, 'utf-8');
+      // Use content from FileContext (already loaded by file-walker)
+      const content = file.content;
 
       // Skip non-GenLayer files
       if (!isGenLayerContract(content)) {
@@ -398,12 +399,8 @@ export async function runGenLayerScanner(
 export function hasGenLayerContracts(files: FileContext[]): boolean {
   return files.some(f => {
     if (!f.path.endsWith('.py')) return false;
-    try {
-      const content = fs.readFileSync(f.path, 'utf-8');
-      return isGenLayerContract(content);
-    } catch {
-      return false;
-    }
+    // Use content from FileContext (already loaded by file-walker)
+    return isGenLayerContract(f.content);
   });
 }
 
