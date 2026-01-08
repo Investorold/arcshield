@@ -1,7 +1,8 @@
 {
   "$schema": "./rules-schema.json",
   "name": "Arc Blockchain Security Rules",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Security rules specific to the Arc blockchain ecosystem",
   "rules": [
     {
       "id": "ARC001",
@@ -86,6 +87,102 @@
       "enabled": true,
       "arcSpecific": true,
       "fix": "Be consistent with decimal handling - native balance is 18, ERC-20 is 6"
+    },
+    {
+      "id": "ARC008",
+      "name": "Gas Price Assumption",
+      "severity": "medium",
+      "category": "gas",
+      "description": "Arc has different gas mechanics - hardcoded gas prices may fail",
+      "patterns": ["gasPrice", "tx\\.gasprice", "gasleft\\(\\)\\s*<"],
+      "cwe": "CWE-400",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Use dynamic gas estimation or Arc-specific gas handling"
+    },
+    {
+      "id": "ARC009",
+      "name": "Cross-Chain Bridge Vulnerability",
+      "severity": "critical",
+      "category": "bridge",
+      "description": "Bridge contracts must validate source chain and message authenticity",
+      "patterns": ["bridgeFrom", "crossChain", "layerZero", "wormhole", "chainId"],
+      "cwe": "CWE-345",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Validate chainId, verify message signatures, implement replay protection"
+    },
+    {
+      "id": "ARC010",
+      "name": "Validator Set Dependency",
+      "severity": "high",
+      "category": "consensus",
+      "description": "Logic dependent on validator set may behave differently on Arc",
+      "patterns": ["coinbase", "block\\.coinbase", "validator"],
+      "cwe": "CWE-362",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Don't rely on specific validator behavior or coinbase address"
+    },
+    {
+      "id": "ARC011",
+      "name": "Native Token Handling",
+      "severity": "high",
+      "category": "token",
+      "description": "Arc native token (USDC) differs from ETH - ensure correct handling",
+      "patterns": ["msg\\.value", "payable", "\\.value\\("],
+      "cwe": "CWE-682",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Verify native token assumptions, handle USDC specifics"
+    },
+    {
+      "id": "ARC012",
+      "name": "Sequencer Dependency",
+      "severity": "medium",
+      "category": "infrastructure",
+      "description": "Logic dependent on sequencer ordering may be exploited",
+      "patterns": ["block\\.number", "getBlockNumber", "latestBlock"],
+      "cwe": "CWE-362",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Don't assume specific block ordering, implement MEV protection"
+    },
+    {
+      "id": "ARC013",
+      "name": "Precompile Usage",
+      "severity": "medium",
+      "category": "compatibility",
+      "description": "Some EVM precompiles may behave differently or not exist on Arc",
+      "patterns": ["ecrecover", "sha256", "ripemd160", "modexp", "ecAdd", "ecMul", "ecPairing"],
+      "cwe": "CWE-573",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Test precompile behavior on Arc testnet before mainnet deployment"
+    },
+    {
+      "id": "ARC014",
+      "name": "L2 Specific Opcodes",
+      "severity": "high",
+      "category": "compatibility",
+      "description": "Some opcodes behave differently on L2s like Arc",
+      "patterns": ["PUSH0", "BASEFEE", "SELFBALANCE", "CHAINID"],
+      "cwe": "CWE-573",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Verify opcode compatibility with Arc's execution environment"
+    },
+    {
+      "id": "ARC015",
+      "name": "Withdrawal Delay Handling",
+      "severity": "medium",
+      "category": "bridge",
+      "description": "L2 to L1 withdrawals have delay periods that must be handled",
+      "patterns": ["withdraw", "exitL2", "finalizeWithdrawal"],
+      "cwe": "CWE-367",
+      "enabled": true,
+      "arcSpecific": true,
+      "fix": "Implement proper withdrawal delay handling and user notifications"
     }
   ]
 }

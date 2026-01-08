@@ -1,0 +1,367 @@
+{
+  "$schema": "./rules-schema.json",
+  "name": "Solidity Smart Contract Security Rules",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "SOL001",
+      "name": "Reentrancy Vulnerability",
+      "severity": "critical",
+      "category": "reentrancy",
+      "description": "External calls before state changes can allow reentrancy attacks",
+      "patterns": [
+        "\\.call\\{value:",
+        "\\.call\\.value\\(",
+        "\\.transfer\\(",
+        "\\.send\\("
+      ],
+      "cwe": "CWE-841",
+      "enabled": true,
+      "fix": "Use checks-effects-interactions pattern. Update state before external calls. Consider ReentrancyGuard."
+    },
+    {
+      "id": "SOL002",
+      "name": "Unchecked External Call",
+      "severity": "high",
+      "category": "unchecked-call",
+      "description": "Return value of external call not checked",
+      "patterns": [
+        "address\\([^)]+\\)\\.call\\(",
+        "\\.delegatecall\\(",
+        "\\.staticcall\\("
+      ],
+      "cwe": "CWE-252",
+      "enabled": true,
+      "fix": "Always check return value: (bool success, ) = addr.call(...); require(success);"
+    },
+    {
+      "id": "SOL003",
+      "name": "Integer Overflow/Underflow",
+      "severity": "high",
+      "category": "arithmetic",
+      "description": "Arithmetic operations without overflow protection (pre-0.8.0)",
+      "patterns": [
+        "pragma solidity \\^?0\\.[0-7]\\.",
+        "unchecked\\s*\\{"
+      ],
+      "cwe": "CWE-190",
+      "enabled": true,
+      "fix": "Use Solidity 0.8+ or SafeMath library for arithmetic operations"
+    },
+    {
+      "id": "SOL004",
+      "name": "Tx.origin Authentication",
+      "severity": "critical",
+      "category": "access-control",
+      "description": "Using tx.origin for authentication is vulnerable to phishing attacks",
+      "patterns": [
+        "tx\\.origin",
+        "require\\([^)]*tx\\.origin"
+      ],
+      "cwe": "CWE-346",
+      "enabled": true,
+      "fix": "Use msg.sender instead of tx.origin for authentication"
+    },
+    {
+      "id": "SOL005",
+      "name": "Unprotected Selfdestruct",
+      "severity": "critical",
+      "category": "access-control",
+      "description": "Selfdestruct without access control can be called by anyone",
+      "patterns": [
+        "selfdestruct\\(",
+        "suicide\\("
+      ],
+      "cwe": "CWE-284",
+      "enabled": true,
+      "fix": "Add onlyOwner or similar modifier to selfdestruct functions"
+    },
+    {
+      "id": "SOL006",
+      "name": "Delegatecall to Untrusted Contract",
+      "severity": "critical",
+      "category": "delegatecall",
+      "description": "Delegatecall preserves context and can be exploited if target is untrusted",
+      "patterns": [
+        "\\.delegatecall\\(",
+        "delegatecall\\(abi\\.encodeWithSignature"
+      ],
+      "cwe": "CWE-829",
+      "enabled": true,
+      "fix": "Only delegatecall to trusted, immutable contracts. Validate target address."
+    },
+    {
+      "id": "SOL007",
+      "name": "Floating Pragma",
+      "severity": "medium",
+      "category": "best-practice",
+      "description": "Floating pragma allows compilation with different versions",
+      "patterns": [
+        "pragma solidity \\^",
+        "pragma solidity >="
+      ],
+      "cwe": "CWE-1103",
+      "enabled": true,
+      "fix": "Lock pragma to specific version: pragma solidity 0.8.20;"
+    },
+    {
+      "id": "SOL008",
+      "name": "Uninitialized Storage Pointer",
+      "severity": "high",
+      "category": "storage",
+      "description": "Uninitialized local storage variables point to storage slot 0",
+      "patterns": [
+        "function\\s+\\w+[^{]*\\{[^}]*\\b(\\w+)\\s+storage\\s+\\w+\\s*;"
+      ],
+      "cwe": "CWE-824",
+      "enabled": true,
+      "fix": "Always initialize storage pointers or use memory keyword"
+    },
+    {
+      "id": "SOL009",
+      "name": "Block Timestamp Manipulation",
+      "severity": "medium",
+      "category": "timing",
+      "description": "Block timestamp can be manipulated by miners within ~15 seconds",
+      "patterns": [
+        "block\\.timestamp",
+        "now"
+      ],
+      "cwe": "CWE-367",
+      "enabled": true,
+      "fix": "Don't use block.timestamp for critical logic. Use block.number for time-sensitive operations."
+    },
+    {
+      "id": "SOL010",
+      "name": "Front-Running Vulnerability",
+      "severity": "high",
+      "category": "front-running",
+      "description": "Transaction ordering can be exploited by miners/validators",
+      "patterns": [
+        "function\\s+(swap|buy|sell|trade|exchange)",
+        "function\\s+\\w+[^{]*payable[^{]*\\{"
+      ],
+      "cwe": "CWE-362",
+      "enabled": true,
+      "fix": "Implement commit-reveal schemes, use submarine sends, or add slippage protection"
+    },
+    {
+      "id": "SOL011",
+      "name": "Missing Zero Address Check",
+      "severity": "medium",
+      "category": "validation",
+      "description": "Functions accepting addresses should validate they're not zero address",
+      "patterns": [
+        "function\\s+\\w+\\s*\\([^)]*address\\s+\\w+[^)]*\\)[^{]*\\{(?![^}]*require\\s*\\([^)]*!=\\s*address\\(0\\))"
+      ],
+      "cwe": "CWE-20",
+      "enabled": true,
+      "fix": "Add require(_addr != address(0), 'Zero address') for address parameters"
+    },
+    {
+      "id": "SOL012",
+      "name": "Unrestricted Token Minting",
+      "severity": "critical",
+      "category": "access-control",
+      "description": "Mint function without access control allows unlimited token creation",
+      "patterns": [
+        "function\\s+mint\\s*\\([^)]*\\)\\s*public(?!.*only)",
+        "function\\s+mint\\s*\\([^)]*\\)\\s*external(?!.*only)"
+      ],
+      "cwe": "CWE-284",
+      "enabled": true,
+      "fix": "Add onlyOwner or role-based access control to mint functions"
+    },
+    {
+      "id": "SOL013",
+      "name": "Flash Loan Vulnerability",
+      "severity": "high",
+      "category": "flash-loan",
+      "description": "State changes based on token balance can be exploited via flash loans",
+      "patterns": [
+        "balanceOf\\([^)]*\\)\\s*[><=]",
+        "getReserves\\(",
+        "sync\\("
+      ],
+      "cwe": "CWE-362",
+      "enabled": true,
+      "fix": "Use time-weighted average prices (TWAP) or implement flash loan protection"
+    },
+    {
+      "id": "SOL014",
+      "name": "Oracle Manipulation",
+      "severity": "critical",
+      "category": "oracle",
+      "description": "Single-block price oracles can be manipulated",
+      "patterns": [
+        "getAmountsOut\\(",
+        "getAmountOut\\(",
+        "latestAnswer\\(",
+        "slot0\\("
+      ],
+      "cwe": "CWE-345",
+      "enabled": true,
+      "fix": "Use TWAP oracles, Chainlink price feeds with staleness checks, or multiple sources"
+    },
+    {
+      "id": "SOL015",
+      "name": "Signature Replay Attack",
+      "severity": "critical",
+      "category": "signature",
+      "description": "Signatures without nonces can be replayed",
+      "patterns": [
+        "ecrecover\\(",
+        "ECDSA\\.recover\\(",
+        "SignatureChecker"
+      ],
+      "cwe": "CWE-347",
+      "enabled": true,
+      "fix": "Include nonce, chainId, and contract address in signed messages. Mark signatures as used."
+    },
+    {
+      "id": "SOL016",
+      "name": "Denial of Service via Gas",
+      "severity": "high",
+      "category": "dos",
+      "description": "Loops over unbounded arrays can exceed gas limits",
+      "patterns": [
+        "for\\s*\\([^)]*\\.length",
+        "while\\s*\\([^)]*\\.length"
+      ],
+      "cwe": "CWE-400",
+      "enabled": true,
+      "fix": "Limit loop iterations, use pagination, or implement pull-over-push patterns"
+    },
+    {
+      "id": "SOL017",
+      "name": "Unsafe ERC20 Operations",
+      "severity": "high",
+      "category": "erc20",
+      "description": "Some tokens don't return bool on transfer, causing reverts",
+      "patterns": [
+        "IERC20\\([^)]+\\)\\.transfer\\(",
+        "IERC20\\([^)]+\\)\\.transferFrom\\(",
+        "\\.approve\\("
+      ],
+      "cwe": "CWE-252",
+      "enabled": true,
+      "fix": "Use SafeERC20 library: safeTransfer, safeTransferFrom, safeApprove"
+    },
+    {
+      "id": "SOL018",
+      "name": "Missing Event Emission",
+      "severity": "low",
+      "category": "best-practice",
+      "description": "State-changing functions should emit events for off-chain tracking",
+      "patterns": [
+        "function\\s+set\\w+[^}]+\\}(?!.*emit)"
+      ],
+      "cwe": "CWE-778",
+      "enabled": true,
+      "fix": "Emit events for all state changes to enable off-chain monitoring"
+    },
+    {
+      "id": "SOL019",
+      "name": "Weak Randomness",
+      "severity": "critical",
+      "category": "randomness",
+      "description": "On-chain randomness using block variables is predictable",
+      "patterns": [
+        "keccak256\\([^)]*block\\.",
+        "block\\.timestamp.*%",
+        "block\\.number.*%",
+        "blockhash\\("
+      ],
+      "cwe": "CWE-330",
+      "enabled": true,
+      "fix": "Use Chainlink VRF or commit-reveal schemes for secure randomness"
+    },
+    {
+      "id": "SOL020",
+      "name": "Hardcoded Addresses",
+      "severity": "medium",
+      "category": "configuration",
+      "description": "Hardcoded addresses reduce flexibility and may cause issues on different networks",
+      "patterns": [
+        "address\\s*\\([^)]*0x[a-fA-F0-9]{40}[^)]*\\)",
+        "=\\s*0x[a-fA-F0-9]{40}"
+      ],
+      "cwe": "CWE-547",
+      "enabled": true,
+      "fix": "Use constructor parameters or configurable addresses with setters"
+    },
+    {
+      "id": "SOL021",
+      "name": "Missing Access Control",
+      "severity": "critical",
+      "category": "access-control",
+      "description": "Sensitive functions without access control modifiers",
+      "patterns": [
+        "function\\s+(withdraw|pause|unpause|upgrade|set\\w+)\\s*\\([^)]*\\)\\s*(public|external)(?!.*only)",
+        "function\\s+(withdraw|pause|unpause|upgrade|set\\w+)\\s*\\([^)]*\\)\\s*(public|external)(?!.*require\\s*\\(\\s*msg\\.sender)"
+      ],
+      "cwe": "CWE-284",
+      "enabled": true,
+      "fix": "Add onlyOwner, onlyRole, or custom access control modifiers"
+    },
+    {
+      "id": "SOL022",
+      "name": "Centralization Risk",
+      "severity": "medium",
+      "category": "centralization",
+      "description": "Single owner with excessive privileges creates centralization risk",
+      "patterns": [
+        "onlyOwner",
+        "Ownable",
+        "require\\(msg\\.sender\\s*==\\s*owner"
+      ],
+      "cwe": "CWE-284",
+      "enabled": true,
+      "fix": "Consider multi-sig, timelock, or DAO governance for sensitive operations"
+    },
+    {
+      "id": "SOL023",
+      "name": "Proxy Storage Collision",
+      "severity": "critical",
+      "category": "proxy",
+      "description": "Proxy implementation storage slots may collide",
+      "patterns": [
+        "delegatecall",
+        "ERC1967",
+        "TransparentUpgradeableProxy",
+        "UUPSUpgradeable"
+      ],
+      "cwe": "CWE-787",
+      "enabled": true,
+      "fix": "Use EIP-1967 storage slots, inherit from upgradeable base contracts in correct order"
+    },
+    {
+      "id": "SOL024",
+      "name": "Insecure External Call",
+      "severity": "high",
+      "category": "external-call",
+      "description": "Low-level call with arbitrary data is dangerous",
+      "patterns": [
+        "\\.call\\(abi\\.encodeWithSignature",
+        "\\.call\\(abi\\.encodeWithSelector",
+        "\\.call\\(_data\\)"
+      ],
+      "cwe": "CWE-20",
+      "enabled": true,
+      "fix": "Validate input data, use specific interfaces instead of raw calls"
+    },
+    {
+      "id": "SOL025",
+      "name": "Missing Reentrancy Guard",
+      "severity": "high",
+      "category": "reentrancy",
+      "description": "Functions with external calls should use reentrancy protection",
+      "patterns": [
+        "function\\s+\\w+[^}]*\\.(call|transfer|send)\\{?[^}]*\\}[^}]*\\}"
+      ],
+      "cwe": "CWE-841",
+      "enabled": true,
+      "fix": "Use OpenZeppelin's ReentrancyGuard with nonReentrant modifier"
+    }
+  ]
+}

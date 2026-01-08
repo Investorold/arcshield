@@ -1,0 +1,327 @@
+{
+  "$schema": "./rules-schema.json",
+  "name": "OWASP Web Security Rules",
+  "version": "1.0.0",
+  "description": "Based on OWASP Top 10 and Web3 security best practices",
+  "rules": [
+    {
+      "id": "OWASP001",
+      "name": "SQL Injection",
+      "severity": "critical",
+      "category": "injection",
+      "description": "User input concatenated into SQL queries enables SQL injection",
+      "patterns": [
+        "query\\s*\\(\\s*[`'\"].*\\$\\{",
+        "execute\\s*\\(\\s*[`'\"].*\\+",
+        "raw\\s*\\(\\s*[`'\"].*\\$\\{",
+        "\\$\\{.*\\}.*SELECT|INSERT|UPDATE|DELETE"
+      ],
+      "cwe": "CWE-89",
+      "enabled": true,
+      "fix": "Use parameterized queries or prepared statements. Never concatenate user input."
+    },
+    {
+      "id": "OWASP002",
+      "name": "Cross-Site Scripting (XSS)",
+      "severity": "high",
+      "category": "injection",
+      "description": "Unescaped user input in HTML enables XSS attacks",
+      "patterns": [
+        "innerHTML\\s*=",
+        "outerHTML\\s*=",
+        "document\\.write\\(",
+        "dangerouslySetInnerHTML",
+        "v-html\\s*=",
+        "\\{\\{\\{.*\\}\\}\\}"
+      ],
+      "cwe": "CWE-79",
+      "enabled": true,
+      "fix": "Use textContent, escape HTML entities, or use framework's built-in XSS protection"
+    },
+    {
+      "id": "OWASP003",
+      "name": "Command Injection",
+      "severity": "critical",
+      "category": "injection",
+      "description": "User input in shell commands enables command injection",
+      "patterns": [
+        "exec\\s*\\(.*\\+",
+        "execSync\\s*\\(.*\\$\\{",
+        "spawn\\s*\\([^,]+,\\s*\\[.*\\+",
+        "child_process",
+        "shell:\\s*true"
+      ],
+      "cwe": "CWE-78",
+      "enabled": true,
+      "fix": "Use execFile with arguments array, validate/sanitize input, avoid shell: true"
+    },
+    {
+      "id": "OWASP004",
+      "name": "Path Traversal",
+      "severity": "high",
+      "category": "injection",
+      "description": "User input in file paths enables directory traversal",
+      "patterns": [
+        "readFile.*\\+",
+        "readFileSync.*\\$\\{",
+        "path\\.join.*req\\.",
+        "fs\\..*\\(.*\\+.*\\)"
+      ],
+      "cwe": "CWE-22",
+      "enabled": true,
+      "fix": "Validate paths, use path.normalize(), check resolved path is within allowed directory"
+    },
+    {
+      "id": "OWASP005",
+      "name": "Hardcoded Secrets",
+      "severity": "critical",
+      "category": "sensitive-data",
+      "description": "Hardcoded API keys, passwords, or secrets in source code",
+      "patterns": [
+        "apiKey\\s*[=:]\\s*['\"][^'\"]{10,}['\"]",
+        "password\\s*[=:]\\s*['\"][^'\"]+['\"]",
+        "secret\\s*[=:]\\s*['\"][^'\"]{10,}['\"]",
+        "private[_-]?key\\s*[=:]\\s*['\"]",
+        "sk-[a-zA-Z0-9]{20,}",
+        "ghp_[a-zA-Z0-9]{36}",
+        "0x[a-fA-F0-9]{64}"
+      ],
+      "cwe": "CWE-798",
+      "enabled": true,
+      "fix": "Use environment variables, secret managers, or encrypted config files"
+    },
+    {
+      "id": "OWASP006",
+      "name": "Insecure Direct Object Reference",
+      "severity": "high",
+      "category": "access-control",
+      "description": "User-controlled IDs without authorization checks",
+      "patterns": [
+        "req\\.params\\.id",
+        "req\\.query\\.userId",
+        "findById\\(req\\.",
+        "where.*id.*req\\."
+      ],
+      "cwe": "CWE-639",
+      "enabled": true,
+      "fix": "Verify user has permission to access the requested resource"
+    },
+    {
+      "id": "OWASP007",
+      "name": "Missing Authentication",
+      "severity": "critical",
+      "category": "authentication",
+      "description": "Sensitive endpoints without authentication middleware",
+      "patterns": [
+        "app\\.(post|put|delete|patch)\\s*\\([^,]+,\\s*(?!.*auth).*\\(req,\\s*res",
+        "router\\.(post|put|delete|patch)\\s*\\([^,]+,\\s*(?!.*auth).*\\(req,\\s*res"
+      ],
+      "cwe": "CWE-306",
+      "enabled": true,
+      "fix": "Add authentication middleware to sensitive routes"
+    },
+    {
+      "id": "OWASP008",
+      "name": "Weak Password Hashing",
+      "severity": "critical",
+      "category": "cryptography",
+      "description": "Using weak or no hashing for passwords",
+      "patterns": [
+        "md5\\(",
+        "sha1\\(",
+        "createHash\\(['\"]md5['\"]",
+        "createHash\\(['\"]sha1['\"]",
+        "password.*=.*req\\."
+      ],
+      "cwe": "CWE-328",
+      "enabled": true,
+      "fix": "Use bcrypt, scrypt, or argon2 for password hashing"
+    },
+    {
+      "id": "OWASP009",
+      "name": "Missing CSRF Protection",
+      "severity": "high",
+      "category": "csrf",
+      "description": "State-changing requests without CSRF tokens",
+      "patterns": [
+        "app\\.post\\(",
+        "app\\.put\\(",
+        "app\\.delete\\("
+      ],
+      "cwe": "CWE-352",
+      "enabled": true,
+      "fix": "Implement CSRF tokens or use SameSite cookies"
+    },
+    {
+      "id": "OWASP010",
+      "name": "Insecure Cookie Configuration",
+      "severity": "medium",
+      "category": "session",
+      "description": "Cookies without secure flags are vulnerable",
+      "patterns": [
+        "cookie\\s*\\([^)]*\\)(?!.*secure)",
+        "Set-Cookie(?!.*Secure)",
+        "httpOnly:\\s*false",
+        "secure:\\s*false"
+      ],
+      "cwe": "CWE-614",
+      "enabled": true,
+      "fix": "Set httpOnly: true, secure: true, sameSite: 'strict' for sensitive cookies"
+    },
+    {
+      "id": "OWASP011",
+      "name": "Missing Rate Limiting",
+      "severity": "medium",
+      "category": "dos",
+      "description": "APIs without rate limiting are vulnerable to abuse",
+      "patterns": [
+        "app\\.listen\\(",
+        "createServer\\("
+      ],
+      "cwe": "CWE-770",
+      "enabled": true,
+      "fix": "Implement rate limiting middleware (express-rate-limit, etc.)"
+    },
+    {
+      "id": "OWASP012",
+      "name": "Insecure TLS/SSL",
+      "severity": "high",
+      "category": "transport",
+      "description": "Disabled SSL verification or weak TLS configuration",
+      "patterns": [
+        "rejectUnauthorized:\\s*false",
+        "NODE_TLS_REJECT_UNAUTHORIZED\\s*=\\s*['\"]?0",
+        "verify\\s*=\\s*False",
+        "InsecureRequestWarning"
+      ],
+      "cwe": "CWE-295",
+      "enabled": true,
+      "fix": "Enable SSL verification, use TLS 1.2+ with strong ciphers"
+    },
+    {
+      "id": "OWASP013",
+      "name": "Open Redirect",
+      "severity": "medium",
+      "category": "redirect",
+      "description": "Unvalidated redirects enable phishing attacks",
+      "patterns": [
+        "res\\.redirect\\(req\\.",
+        "location\\s*=\\s*req\\.",
+        "window\\.location\\s*=.*\\+"
+      ],
+      "cwe": "CWE-601",
+      "enabled": true,
+      "fix": "Validate redirect URLs against allowlist of trusted domains"
+    },
+    {
+      "id": "OWASP014",
+      "name": "Server-Side Request Forgery",
+      "severity": "high",
+      "category": "ssrf",
+      "description": "User-controlled URLs in server-side requests",
+      "patterns": [
+        "fetch\\(req\\.",
+        "axios\\.[a-z]+\\(req\\.",
+        "request\\(req\\.",
+        "http\\.get\\(.*req\\."
+      ],
+      "cwe": "CWE-918",
+      "enabled": true,
+      "fix": "Validate and allowlist URLs, block internal IPs and localhost"
+    },
+    {
+      "id": "OWASP015",
+      "name": "Mass Assignment",
+      "severity": "high",
+      "category": "validation",
+      "description": "Accepting all user input fields allows unintended updates",
+      "patterns": [
+        "\\.create\\(req\\.body\\)",
+        "\\.update\\(req\\.body\\)",
+        "Object\\.assign\\([^,]+,\\s*req\\.body",
+        "\\.\\.\\. *req\\.body"
+      ],
+      "cwe": "CWE-915",
+      "enabled": true,
+      "fix": "Explicitly pick allowed fields from request body"
+    },
+    {
+      "id": "OWASP016",
+      "name": "Verbose Error Messages",
+      "severity": "low",
+      "category": "information-disclosure",
+      "description": "Detailed error messages expose system information",
+      "patterns": [
+        "res\\.send\\(err\\)",
+        "res\\.json\\(.*error.*stack",
+        "console\\.error\\(err\\)"
+      ],
+      "cwe": "CWE-209",
+      "enabled": true,
+      "fix": "Log errors server-side, return generic messages to users"
+    },
+    {
+      "id": "OWASP017",
+      "name": "Missing Security Headers",
+      "severity": "medium",
+      "category": "headers",
+      "description": "Missing security headers like CSP, HSTS, X-Frame-Options",
+      "patterns": [
+        "app\\.use\\(cors\\(\\)\\)",
+        "Access-Control-Allow-Origin.*\\*"
+      ],
+      "cwe": "CWE-693",
+      "enabled": true,
+      "fix": "Use helmet middleware, set CSP, HSTS, X-Frame-Options headers"
+    },
+    {
+      "id": "OWASP018",
+      "name": "Prototype Pollution",
+      "severity": "high",
+      "category": "injection",
+      "description": "Object modification via __proto__ or constructor.prototype",
+      "patterns": [
+        "__proto__",
+        "constructor\\.prototype",
+        "Object\\.assign\\([^,]+,\\s*JSON\\.parse",
+        "merge\\([^)]*JSON\\.parse"
+      ],
+      "cwe": "CWE-1321",
+      "enabled": true,
+      "fix": "Use Object.create(null), validate keys, use safe merge libraries"
+    },
+    {
+      "id": "OWASP019",
+      "name": "Insecure Deserialization",
+      "severity": "critical",
+      "category": "deserialization",
+      "description": "Deserializing untrusted data can lead to RCE",
+      "patterns": [
+        "eval\\(",
+        "Function\\(['\"]",
+        "unserialize\\(",
+        "pickle\\.loads\\(",
+        "yaml\\.load\\((?!.*Loader)"
+      ],
+      "cwe": "CWE-502",
+      "enabled": true,
+      "fix": "Never deserialize untrusted data, use safe parsers with schema validation"
+    },
+    {
+      "id": "OWASP020",
+      "name": "JWT Vulnerabilities",
+      "severity": "high",
+      "category": "authentication",
+      "description": "Weak JWT configuration or missing validation",
+      "patterns": [
+        "algorithm.*none",
+        "algorithms:\\s*\\[.*none",
+        "verify:\\s*false",
+        "jwt\\.decode\\((?!.*verify)"
+      ],
+      "cwe": "CWE-347",
+      "enabled": true,
+      "fix": "Always verify JWTs, specify allowed algorithms, use strong secrets"
+    }
+  ]
+}
