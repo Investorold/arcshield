@@ -15,10 +15,10 @@ import { MODEL_COSTS } from '../constants.js';
 
 export type ModelType = string; // Now accepts any model name
 
-// Anthropic model IDs (using latest aliases for reliability)
+// Anthropic model IDs (Claude 3 - most widely available)
 const ANTHROPIC_MODEL_IDS: Record<string, string> = {
-  haiku: 'claude-3-5-haiku-latest',
-  sonnet: 'claude-3-5-sonnet-latest',
+  haiku: 'claude-3-haiku-20240307',
+  sonnet: 'claude-3-7-sonnet-latest',
   opus: 'claude-3-opus-latest',
 };
 
