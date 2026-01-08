@@ -64,3 +64,4 @@ EXPOSE 3501
 # Start server
 WORKDIR /app/packages/web
 CMD ["node", "dist/api/server.js"]
+
