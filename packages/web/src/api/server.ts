@@ -20,7 +20,7 @@ import {
 } from './auth.js';
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 3501;
 
 // In-memory session storage (use Redis in production)
 const sessions: Map<string, {
@@ -533,7 +533,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
     const { code } = req.query;
 
     if (!code || typeof code !== 'string') {
-      return res.redirect('http://localhost:5000/scan?error=no_code');
+      return res.redirect('http://localhost:3500/scan?error=no_code');
     }
 
     // Exchange code for token
@@ -549,10 +549,10 @@ app.get('/api/auth/github/callback', async (req, res) => {
     sessions.set(sessionId, { accessToken, user });
 
     // Redirect to frontend with session ID
-    res.redirect(`http://localhost:5000/scan?session=${sessionId}`);
+    res.redirect(`http://localhost:3500/scan?session=${sessionId}`);
   } catch (error) {
     console.error('OAuth callback error:', error);
-    res.redirect(`http://localhost:5000/scan?error=${encodeURIComponent(error instanceof Error ? error.message : 'auth_failed')}`);
+    res.redirect(`http://localhost:3500/scan?error=${encodeURIComponent(error instanceof Error ? error.message : 'auth_failed')}`);
   }
 });
 

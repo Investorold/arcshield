@@ -4,7 +4,7 @@
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23lizuM9JUg3oCeLUK';
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '8f3c73b41451d49d99f89f210f29f3914986eb43';
-const GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || 'http://localhost:5001/api/auth/github/callback';
+const GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3501/api/auth/github/callback';
 
 export interface GitHubUser {
   id: number;
