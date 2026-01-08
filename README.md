@@ -125,9 +125,9 @@ arcshield/
 ## Roadmap
 
 - [x] Phase 1: Foundation (multi-agent framework)
-- [ ] Phase 2: Smart Contract Integration
-- [ ] Phase 3: Arc Specialization
-- [ ] Phase 4: Web Interface
+- [x] Phase 2: Smart Contract Integration (Slither + Mythril)
+- [x] Phase 3: Arc Specialization (Arc-specific rules)
+- [x] Phase 4: Web Interface (React dashboard)
 - [ ] Phase 5: Production Launch
 
 ## License
