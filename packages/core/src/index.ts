@@ -12,6 +12,7 @@ import { ThreatModelingAgent } from './agents/threat-modeling.js';
 import { CodeReviewAgent } from './agents/code-review.js';
 import { ReportGeneratorAgent } from './agents/report-generator.js';
 import { runSlither, isSlitherInstalled } from './scanners/slither.js';
+import { runMythril, isMythrilInstalled } from './scanners/mythril.js';
 import { runArcScanner } from './scanners/arc-scanner.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
@@ -159,16 +160,30 @@ export class Scanner {
         const slitherInstalled = await isSlitherInstalled();
         if (slitherInstalled) {
           console.log('[Slither] Running static analysis...');
-          smartContractVulns = await runSlither(workDir);
-          console.log(`[Slither] Found ${smartContractVulns.length} issues`);
+          const slitherVulns = await runSlither(workDir);
+          console.log(`[Slither] Found ${slitherVulns.length} issues`);
+          smartContractVulns.push(...slitherVulns);
         } else {
           console.log('[Slither] Not installed - skipping');
           console.log('[Slither] Install with: pip install slither-analyzer');
         }
 
+        // Run Mythril (if installed)
+        const mythrilInstalled = await isMythrilInstalled();
+        if (mythrilInstalled) {
+          console.log('[Mythril] Running symbolic execution...');
+          const mythrilVulns = await runMythril(workDir);
+          console.log(`[Mythril] Found ${mythrilVulns.length} issues`);
+          smartContractVulns.push(...mythrilVulns);
+        } else {
+          console.log('[Mythril] Not installed - skipping');
+          console.log('[Mythril] Install with: pip install mythril');
+        }
+
         // Run Arc-specific scanner
         console.log('[Arc Scanner] Checking for Arc-specific vulnerabilities...');
         arcVulns = await runArcScanner(context.files);
+        console.log(`[Arc Scanner] Found ${arcVulns.length} issues`);
       }
     }
 
