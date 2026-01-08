@@ -18,6 +18,11 @@ import {
   type GitHubUser,
   type GitHubRepo,
 } from './auth.js';
+import {
+  generateVerifiedBadge,
+  generateScoreBadge,
+  generateStatusBadge,
+} from './badge.js';
 
 const app = express();
 const PORT = process.env.PORT || 3501;
@@ -774,6 +779,135 @@ app.get('/api/usage', (_req, res) => {
       dailySpendingCapUSD: RATE_LIMIT_CONFIG.dailySpendingCapUSD,
     },
   });
+});
+
+// ==========================================
+// Badge Endpoints
+// ==========================================
+
+/**
+ * GET /api/badge/:id/verified.svg - Get verified status badge
+ */
+app.get('/api/badge/:id/verified.svg', (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = path.join(SCANS_DIR, `${id}.json`);
+
+    if (!fs.existsSync(filePath)) {
+      // Return "Unknown" badge if scan not found
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(generateVerifiedBadge(false));
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const report: ScanReport = JSON.parse(content);
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+    res.send(generateVerifiedBadge(report.badge.eligible));
+  } catch (error) {
+    console.error('Error generating badge:', error);
+    res.status(500).send('Error generating badge');
+  }
+});
+
+/**
+ * GET /api/badge/:id/score.svg - Get score badge
+ */
+app.get('/api/badge/:id/score.svg', (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = path.join(SCANS_DIR, `${id}.json`);
+
+    if (!fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(generateScoreBadge(0));
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const report: ScanReport = JSON.parse(content);
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(generateScoreBadge(report.score));
+  } catch (error) {
+    console.error('Error generating badge:', error);
+    res.status(500).send('Error generating badge');
+  }
+});
+
+/**
+ * GET /api/badge/:id/status.svg - Get combined status badge
+ */
+app.get('/api/badge/:id/status.svg', (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = path.join(SCANS_DIR, `${id}.json`);
+
+    if (!fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(generateStatusBadge(0, false));
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const report: ScanReport = JSON.parse(content);
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(generateStatusBadge(report.score, report.badge.eligible));
+  } catch (error) {
+    console.error('Error generating badge:', error);
+    res.status(500).send('Error generating badge');
+  }
+});
+
+/**
+ * GET /api/badge/:id/embed - Get embed code for badges
+ */
+app.get('/api/badge/:id/embed', (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = path.join(SCANS_DIR, `${id}.json`);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Scan not found' });
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const report: ScanReport = JSON.parse(content);
+
+    // Base URL (use environment variable in production)
+    const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+    res.json({
+      scanId: id,
+      score: report.score,
+      eligible: report.badge.eligible,
+      badges: {
+        verified: {
+          url: `${baseUrl}/api/badge/${id}/verified.svg`,
+          markdown: `![ArcShield Verified](${baseUrl}/api/badge/${id}/verified.svg)`,
+          html: `<img src="${baseUrl}/api/badge/${id}/verified.svg" alt="ArcShield Verified" />`,
+        },
+        score: {
+          url: `${baseUrl}/api/badge/${id}/score.svg`,
+          markdown: `![ArcShield Score](${baseUrl}/api/badge/${id}/score.svg)`,
+          html: `<img src="${baseUrl}/api/badge/${id}/score.svg" alt="ArcShield Score" />`,
+        },
+        status: {
+          url: `${baseUrl}/api/badge/${id}/status.svg`,
+          markdown: `![ArcShield Status](${baseUrl}/api/badge/${id}/status.svg)`,
+          html: `<img src="${baseUrl}/api/badge/${id}/status.svg" alt="ArcShield Status" />`,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error getting embed code:', error);
+    res.status(500).json({ error: 'Failed to get embed code' });
+  }
 });
 
 // Health check

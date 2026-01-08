@@ -1,10 +1,31 @@
 import { useParams, Link } from 'react-router-dom';
+import { useState } from 'react';
 import { useScan } from '../hooks/useScans';
 import ScoreGauge from '../components/ScoreGauge';
 import SeverityStats from '../components/SeverityStats';
 import ThreatChart from '../components/ThreatChart';
 import VulnTable from '../components/VulnTable';
 import ArcBadge from '../components/ArcBadge';
+
+// Copy button component for badge embeds
+function CopyBadgeCode({ code, label }: { code: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded transition-colors"
+    >
+      {copied ? 'Copied!' : label}
+    </button>
+  );
+}
 
 export default function Report() {
   const { id } = useParams<{ id: string }>();
@@ -83,6 +104,54 @@ export default function Report() {
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Badge Status</h2>
           <ArcBadge eligible={scan.badge.eligible} reason={scan.badge.reason} />
+
+          {/* Badge Embed Section */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <h3 className="text-sm font-medium text-gray-300 mb-3">Add Badge to Your README</h3>
+
+            {/* Badge Preview */}
+            <div className="flex gap-2 mb-4">
+              <img
+                src={`/api/badge/${scan.id}/verified.svg`}
+                alt="ArcShield Verified Badge"
+                className="h-5"
+              />
+              <img
+                src={`/api/badge/${scan.id}/score.svg`}
+                alt="ArcShield Score Badge"
+                className="h-5"
+              />
+            </div>
+
+            {/* Copy Buttons */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-20">Verified:</span>
+                <CopyBadgeCode
+                  code={`![ArcShield Verified](${window.location.origin}/api/badge/${scan.id}/verified.svg)`}
+                  label="Copy Markdown"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-20">Score:</span>
+                <CopyBadgeCode
+                  code={`![ArcShield Score](${window.location.origin}/api/badge/${scan.id}/score.svg)`}
+                  label="Copy Markdown"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-20">Combined:</span>
+                <CopyBadgeCode
+                  code={`![ArcShield](${window.location.origin}/api/badge/${scan.id}/status.svg)`}
+                  label="Copy Markdown"
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-3">
+              Paste this in your README.md to show your security status.
+            </p>
+          </div>
         </div>
       </div>
 
