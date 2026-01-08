@@ -34,6 +34,7 @@ export default function Report() {
     ...(scan.vulnerabilities?.vulnerabilities || []),
     ...(scan.arcVulnerabilities || []),
     ...(scan.smartContractVulnerabilities || []),
+    ...(scan.genLayerVulnerabilities || []),
   ];
 
   return (

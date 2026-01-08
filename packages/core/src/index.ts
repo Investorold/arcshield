@@ -14,6 +14,7 @@ import { ReportGeneratorAgent } from './agents/report-generator.js';
 import { runSlither, isSlitherInstalled } from './scanners/slither.js';
 import { runMythril, isMythrilInstalled } from './scanners/mythril.js';
 import { runArcScanner } from './scanners/arc-scanner.js';
+import { runGenLayerScanner, hasGenLayerContracts } from './scanners/genlayer/index.js';
 import { BADGE_THRESHOLD } from './constants.js';
 
 // Export types
@@ -187,6 +188,21 @@ export class Scanner {
       }
     }
 
+    // Step 7: Run GenLayer Scanner (if enabled and GenLayer contracts exist)
+    let genLayerVulns: ScanReport['genLayerVulnerabilities'] = [];
+
+    if (this.config.includeGenLayer) {
+      const hasGenLayer = hasGenLayerContracts(context.files);
+
+      if (hasGenLayer) {
+        console.log('\n🧠 Phase 6: GenLayer Intelligent Contract Analysis');
+        genLayerVulns = await runGenLayerScanner(context.files);
+        console.log(`[GenLayer] Found ${genLayerVulns.length} issues`);
+      } else {
+        console.log('\n[GenLayer] No intelligent contracts found - skipping');
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     // Create placeholder report
@@ -203,24 +219,30 @@ export class Scanner {
       vulnerabilities: codeReviewResult.data as ScanReport['vulnerabilities'],
       smartContractVulnerabilities: smartContractVulns,
       arcVulnerabilities: arcVulns,
+      genLayerVulnerabilities: genLayerVulns,
       summary: {
         totalIssues: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.total +
-                     smartContractVulns.length + arcVulns.length,
+                     smartContractVulns.length + arcVulns.length + genLayerVulns.length,
         critical: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.critical +
                   smartContractVulns.filter(v => v.severity === 'critical').length +
-                  arcVulns.filter(v => v.severity === 'critical').length,
+                  arcVulns.filter(v => v.severity === 'critical').length +
+                  genLayerVulns.filter(v => v.severity === 'critical').length,
         high: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.high +
               smartContractVulns.filter(v => v.severity === 'high').length +
-              arcVulns.filter(v => v.severity === 'high').length,
+              arcVulns.filter(v => v.severity === 'high').length +
+              genLayerVulns.filter(v => v.severity === 'high').length,
         medium: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.medium +
                 smartContractVulns.filter(v => v.severity === 'medium').length +
-                arcVulns.filter(v => v.severity === 'medium').length,
+                arcVulns.filter(v => v.severity === 'medium').length +
+                genLayerVulns.filter(v => v.severity === 'medium').length,
         low: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.low +
              smartContractVulns.filter(v => v.severity === 'low').length +
-             arcVulns.filter(v => v.severity === 'low').length,
+             arcVulns.filter(v => v.severity === 'low').length +
+             genLayerVulns.filter(v => v.severity === 'low').length,
         info: (codeReviewResult.data as ScanReport['vulnerabilities']).summary.bySeverity.info +
               smartContractVulns.filter(v => v.severity === 'info').length +
-              arcVulns.filter(v => v.severity === 'info').length,
+              arcVulns.filter(v => v.severity === 'info').length +
+              genLayerVulns.filter(v => v.severity === 'info').length,
       },
       badge: {
         eligible: false, // Will be calculated after summary is complete
