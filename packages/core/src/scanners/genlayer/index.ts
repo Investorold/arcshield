@@ -10,7 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { GenLayerVulnerability, Severity, FileInfo } from '../../types/index.js';
+import type { GenLayerVulnerability, Severity, FileContext } from '../../types/index.js';
 
 // GenLayer-specific vulnerability patterns
 interface GenLayerRule {
@@ -128,6 +128,7 @@ function findPromptInjections(
         aiFixPrompt: `Fix the prompt injection vulnerability at ${filePath}:${lineNum}. The code concatenates user input directly into an LLM prompt. Implement input sanitization and use a template approach instead.`,
         genLayerSpecific: true,
         genLayerRule: 'GL001',
+        promptRelated: true,
       });
       promptConcatPattern.lastIndex = 0;
     }
@@ -148,6 +149,7 @@ function findPromptInjections(
         aiFixPrompt: `Review ${filePath}:${lineNum} for potential prompt injection via f-string. Ensure all interpolated variables are sanitized.`,
         genLayerSpecific: true,
         genLayerRule: 'GL001',
+        promptRelated: true,
       });
       fstringPattern.lastIndex = 0;
     }
@@ -188,6 +190,7 @@ function findPromptInjections(
               aiFixPrompt: `Critical: Fix prompt injection at ${filePath}:${promptStartLine}. User variable "${v}" flows into LLM prompt. Add sanitization function.`,
               genLayerSpecific: true,
               genLayerRule: 'GL001',
+              promptRelated: true,
             });
             break;
           }
@@ -269,6 +272,7 @@ function findMissingSanitization(
                 aiFixPrompt: `Add input sanitization for parameter "${param}" in ${filePath}:${functionStartLine}. Create a sanitize_input() function that removes injection patterns.`,
                 genLayerSpecific: true,
                 genLayerRule: 'GL003',
+                promptRelated: true,
               });
             }
           }
@@ -328,6 +332,7 @@ function findExternalApiIssues(
           aiFixPrompt: `Add error handling for external API call at ${filePath}:${lineNum}. Wrap in try-except and provide fallback.`,
           genLayerSpecific: true,
           genLayerRule: 'GL004',
+          promptRelated: false,
         });
       }
     }
@@ -340,7 +345,7 @@ function findExternalApiIssues(
  * Run GenLayer scanner on files
  */
 export async function runGenLayerScanner(
-  files: FileInfo[]
+  files: FileContext[]
 ): Promise<GenLayerVulnerability[]> {
   const vulnerabilities: GenLayerVulnerability[] = [];
 
@@ -390,7 +395,7 @@ export async function runGenLayerScanner(
 /**
  * Check if a project uses GenLayer
  */
-export function hasGenLayerContracts(files: FileInfo[]): boolean {
+export function hasGenLayerContracts(files: FileContext[]): boolean {
   return files.some(f => {
     if (!f.path.endsWith('.py')) return false;
     try {
