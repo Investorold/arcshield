@@ -15,11 +15,13 @@ import { MODEL_COSTS } from '../constants.js';
 
 export type ModelType = string; // Now accepts any model name
 
-// Anthropic model IDs (updated January 2025)
+// Anthropic model IDs
+// Note: Your API key may only have access to certain models
+// Check console.anthropic.com to enable Sonnet/Opus
 const ANTHROPIC_MODEL_IDS: Record<string, string> = {
-  haiku: 'claude-3-5-haiku-20241022',
-  sonnet: 'claude-3-5-sonnet-20241022',
-  opus: 'claude-3-opus-20240229',
+  haiku: 'claude-3-haiku-20240307',
+  sonnet: 'claude-3-haiku-20240307',  // Fallback to haiku if sonnet unavailable
+  opus: 'claude-3-haiku-20240307',    // Fallback to haiku if opus unavailable
 };
 
 // Default Ollama URL
