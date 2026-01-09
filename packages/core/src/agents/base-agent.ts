@@ -15,11 +15,11 @@ import { MODEL_COSTS } from '../constants.js';
 
 export type ModelType = string; // Now accepts any model name
 
-// Anthropic model IDs (Claude 3 - most widely available)
+// Anthropic model IDs (updated January 2025)
 const ANTHROPIC_MODEL_IDS: Record<string, string> = {
-  haiku: 'claude-3-haiku-20240307',
-  sonnet: 'claude-3-7-sonnet-latest',
-  opus: 'claude-3-opus-latest',
+  haiku: 'claude-3-5-haiku-20241022',
+  sonnet: 'claude-3-5-sonnet-20241022',
+  opus: 'claude-3-opus-20240229',
 };
 
 // Default Ollama URL

@@ -1,0 +1,494 @@
+{
+  "name": "Rust Security Rules",
+  "version": "1.0.0",
+  "description": "Security rules for Rust applications",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "RS001",
+      "name": "SQL Injection",
+      "description": "User input in SQL queries without parameterization allows database manipulation.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "format!\\s*\\(\\s*\"SELECT.*\\{",
+          "flags": "gi",
+          "description": "format! in SELECT"
+        },
+        {
+          "pattern": "format!\\s*\\(\\s*\"INSERT.*\\{",
+          "flags": "gi",
+          "description": "format! in INSERT"
+        },
+        {
+          "pattern": "format!\\s*\\(\\s*\"UPDATE.*\\{",
+          "flags": "gi",
+          "description": "format! in UPDATE"
+        },
+        {
+          "pattern": "format!\\s*\\(\\s*\"DELETE.*\\{",
+          "flags": "gi",
+          "description": "format! in DELETE"
+        },
+        {
+          "pattern": "\\.execute\\s*\\(&format!",
+          "flags": "gi",
+          "description": "execute with format!"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\$\\d|sqlx::query!|diesel::",
+          "flags": "gi",
+          "description": "Parameterized query or ORM"
+        }
+      ],
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use parameterized queries with sqlx::query! or diesel ORM.",
+      "badExample": "conn.execute(&format!(\"SELECT * FROM users WHERE id = {}\", id))",
+      "goodExample": "sqlx::query!(\"SELECT * FROM users WHERE id = $1\", id)",
+      "enabled": true,
+      "tags": ["sql", "database"],
+      "confidence": "high"
+    },
+    {
+      "id": "RS002",
+      "name": "Command Injection",
+      "description": "User input in command execution allows arbitrary system commands.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "Command::new\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "Command with format!"
+        },
+        {
+          "pattern": "Command::new\\s*\\([^)]*\\).*\\.arg\\s*\\(&format!",
+          "flags": "gi",
+          "description": "Command.arg with format!"
+        },
+        {
+          "pattern": "\\.args\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "args with format!"
+        },
+        {
+          "pattern": "Command::new\\s*\\(\\s*\"sh\"\\s*\\).*-c",
+          "flags": "gi",
+          "description": "Shell execution"
+        }
+      ],
+      "cwe": "CWE-78",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Pass arguments separately using .arg(), avoid shell execution.",
+      "badExample": "Command::new(\"sh\").arg(\"-c\").arg(format!(\"echo {}\", input))",
+      "goodExample": "Command::new(\"echo\").arg(&sanitized_input)",
+      "enabled": true,
+      "tags": ["command", "os", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "RS003",
+      "name": "Unsafe Block",
+      "description": "Unsafe blocks bypass Rust's safety guarantees and require careful review.",
+      "severity": "medium",
+      "category": "other",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "unsafe\\s*\\{",
+          "flags": "gi",
+          "description": "unsafe block"
+        },
+        {
+          "pattern": "unsafe\\s+fn\\s+",
+          "flags": "gi",
+          "description": "unsafe function"
+        },
+        {
+          "pattern": "unsafe\\s+impl\\s+",
+          "flags": "gi",
+          "description": "unsafe impl"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "// SAFETY:|// Safety:",
+          "flags": "gi",
+          "description": "Safety documentation present"
+        }
+      ],
+      "cwe": "CWE-787",
+      "remediation": "Document safety invariants with // SAFETY: comments. Minimize unsafe scope.",
+      "enabled": true,
+      "tags": ["unsafe", "memory"],
+      "confidence": "low"
+    },
+    {
+      "id": "RS004",
+      "name": "Hardcoded Credentials",
+      "description": "Passwords and secrets hardcoded in source code can be extracted.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "(?:password|passwd|secret|api_key|apikey|token)\\s*[=:]\\s*\"[^\"]{4,}\"",
+          "flags": "gi",
+          "description": "Hardcoded credential"
+        },
+        {
+          "pattern": "const\\s+(?:PASSWORD|SECRET|API_KEY)\\s*:\\s*&str\\s*=\\s*\"[^\"]+\"",
+          "flags": "gi",
+          "description": "Const credential"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "std::env|dotenv|config::",
+          "flags": "gi",
+          "description": "Environment/config usage"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Use environment variables or configuration files for secrets.",
+      "enabled": true,
+      "tags": ["secrets", "credentials"],
+      "confidence": "high"
+    },
+    {
+      "id": "RS005",
+      "name": "Path Traversal",
+      "description": "User input in file paths can access files outside intended directory.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "File::open\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "File::open with format!"
+        },
+        {
+          "pattern": "std::fs::read\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "fs::read with format!"
+        },
+        {
+          "pattern": "Path::new\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Path::new with concatenation"
+        },
+        {
+          "pattern": "\\.join\\s*\\(.*user|request|input",
+          "flags": "gi",
+          "description": "join with user input"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "canonicalize|strip_prefix|starts_with",
+          "flags": "gi",
+          "description": "Path validation"
+        }
+      ],
+      "cwe": "CWE-22",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Use canonicalize() and validate paths start with base directory.",
+      "badExample": "File::open(format!(\"{}/{}\", base_dir, user_input))",
+      "goodExample": "let path = base.join(input).canonicalize()?; if !path.starts_with(&base) { return Err(...) }",
+      "enabled": true,
+      "tags": ["file", "lfi", "path"],
+      "confidence": "medium"
+    },
+    {
+      "id": "RS006",
+      "name": "Weak Cryptography",
+      "description": "Use of weak or deprecated cryptographic algorithms.",
+      "severity": "high",
+      "category": "cryptography",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "use\\s+md5::",
+          "flags": "gi",
+          "description": "MD5 import"
+        },
+        {
+          "pattern": "use\\s+sha1::",
+          "flags": "gi",
+          "description": "SHA-1 import"
+        },
+        {
+          "pattern": "Md5::digest",
+          "flags": "gi",
+          "description": "MD5 usage"
+        },
+        {
+          "pattern": "Sha1::digest",
+          "flags": "gi",
+          "description": "SHA-1 usage"
+        },
+        {
+          "pattern": "use\\s+des::",
+          "flags": "gi",
+          "description": "DES import"
+        },
+        {
+          "pattern": "use\\s+rc4::",
+          "flags": "gi",
+          "description": "RC4 import"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "// (checksum|fingerprint|legacy|compatibility)",
+          "flags": "gi",
+          "description": "Non-security use documented"
+        }
+      ],
+      "cwe": "CWE-327",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "remediation": "Use sha2, sha3, or blake3 for hashing; aes-gcm for encryption.",
+      "badExample": "use md5::Md5;",
+      "goodExample": "use sha2::{Sha256, Digest};",
+      "enabled": true,
+      "tags": ["crypto", "hash"],
+      "confidence": "high"
+    },
+    {
+      "id": "RS007",
+      "name": "Insecure TLS Configuration",
+      "description": "Weak TLS configuration allows man-in-the-middle attacks.",
+      "severity": "high",
+      "category": "cryptography",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "danger_accept_invalid_certs\\s*\\(\\s*true\\s*\\)",
+          "flags": "gi",
+          "description": "Accept invalid certs"
+        },
+        {
+          "pattern": "danger_accept_invalid_hostnames\\s*\\(\\s*true\\s*\\)",
+          "flags": "gi",
+          "description": "Accept invalid hostnames"
+        },
+        {
+          "pattern": "TlsVersion::Tls10|TlsVersion::Tls11",
+          "flags": "gi",
+          "description": "Old TLS version"
+        }
+      ],
+      "cwe": "CWE-295",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Enable certificate verification and use TLS 1.2+ minimum.",
+      "enabled": true,
+      "tags": ["tls", "ssl", "crypto"],
+      "confidence": "high"
+    },
+    {
+      "id": "RS008",
+      "name": "Panic in Production",
+      "description": "Panic can cause denial of service. Handle errors gracefully.",
+      "severity": "medium",
+      "category": "dos",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "\\.unwrap\\(\\)",
+          "flags": "gi",
+          "description": "unwrap() usage"
+        },
+        {
+          "pattern": "\\.expect\\s*\\(",
+          "flags": "gi",
+          "description": "expect() usage"
+        },
+        {
+          "pattern": "panic!\\s*\\(",
+          "flags": "gi",
+          "description": "panic! macro"
+        },
+        {
+          "pattern": "unreachable!\\s*\\(",
+          "flags": "gi",
+          "description": "unreachable! macro"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "#\\[cfg\\(test\\)\\]|#\\[test\\]|mod\\s+tests",
+          "flags": "gi",
+          "description": "Test code"
+        }
+      ],
+      "cwe": "CWE-754",
+      "remediation": "Use ? operator, Result handling, or .unwrap_or_default() in production code.",
+      "badExample": "file.read_to_string(&mut contents).unwrap()",
+      "goodExample": "file.read_to_string(&mut contents)?",
+      "enabled": true,
+      "tags": ["error", "panic", "availability"],
+      "confidence": "low"
+    },
+    {
+      "id": "RS009",
+      "name": "SSRF Vulnerability",
+      "description": "User input in HTTP requests can access internal services.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "reqwest::get\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "reqwest::get with format!"
+        },
+        {
+          "pattern": "Client::.*get\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "Client.get with format!"
+        },
+        {
+          "pattern": "Client::.*post\\s*\\(.*format!",
+          "flags": "gi",
+          "description": "Client.post with format!"
+        },
+        {
+          "pattern": "Url::parse\\s*\\(&format!",
+          "flags": "gi",
+          "description": "Url::parse with format!"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "whitelist|allowed_hosts|validate_url",
+          "flags": "gi",
+          "description": "URL validation"
+        }
+      ],
+      "cwe": "CWE-918",
+      "owasp": "A10:2021-Server-Side Request Forgery",
+      "remediation": "Validate URLs against allowlist, block internal IP ranges.",
+      "enabled": true,
+      "tags": ["ssrf", "network"],
+      "confidence": "medium"
+    },
+    {
+      "id": "RS010",
+      "name": "Unvalidated Deserialization",
+      "description": "Deserializing untrusted data can lead to denial of service or code execution.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "serde_json::from_str\\s*\\(.*request|body|input",
+          "flags": "gi",
+          "description": "JSON deserialization of user input"
+        },
+        {
+          "pattern": "bincode::deserialize\\s*\\(",
+          "flags": "gi",
+          "description": "bincode deserialization"
+        },
+        {
+          "pattern": "rmp_serde::from_slice\\s*\\(",
+          "flags": "gi",
+          "description": "MessagePack deserialization"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "validate|#\\[validate\\]|size_limit",
+          "flags": "gi",
+          "description": "Validation present"
+        }
+      ],
+      "cwe": "CWE-502",
+      "owasp": "A08:2021-Software and Data Integrity Failures",
+      "remediation": "Validate and limit size of deserialized data. Use serde's deny_unknown_fields.",
+      "enabled": true,
+      "tags": ["deserialization", "serde"],
+      "confidence": "medium"
+    },
+    {
+      "id": "RS011",
+      "name": "Integer Overflow",
+      "description": "Integer overflow in release builds wraps silently, causing logic errors.",
+      "severity": "medium",
+      "category": "input_validation",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "\\.wrapping_add\\s*\\(",
+          "flags": "gi",
+          "description": "wrapping_add usage"
+        },
+        {
+          "pattern": "\\.wrapping_mul\\s*\\(",
+          "flags": "gi",
+          "description": "wrapping_mul usage"
+        },
+        {
+          "pattern": "as\\s+u8|as\\s+u16|as\\s+i8|as\\s+i16",
+          "flags": "gi",
+          "description": "Narrow cast"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "checked_|saturating_|overflowing_",
+          "flags": "gi",
+          "description": "Safe arithmetic"
+        }
+      ],
+      "cwe": "CWE-190",
+      "remediation": "Use checked_add/mul or saturating_add/mul for arithmetic with untrusted input.",
+      "badExample": "let result = a.wrapping_add(b);",
+      "goodExample": "let result = a.checked_add(b).ok_or(Error::Overflow)?;",
+      "enabled": true,
+      "tags": ["integer", "overflow"],
+      "confidence": "low"
+    },
+    {
+      "id": "RS012",
+      "name": "Format String Vulnerability",
+      "description": "User input in format strings can cause crashes or information disclosure.",
+      "severity": "medium",
+      "category": "injection",
+      "languages": ["rust"],
+      "patterns": [
+        {
+          "pattern": "format!\\s*\\(\\s*&?\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "format! with variable"
+        },
+        {
+          "pattern": "println!\\s*\\(\\s*&?\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "println! with variable"
+        },
+        {
+          "pattern": "write!\\s*\\([^,]+,\\s*&?\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "write! with variable"
+        }
+      ],
+      "cwe": "CWE-134",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Always use format string literals: println!(\"{}\", user_input)",
+      "badExample": "println!(user_input)",
+      "goodExample": "println!(\"{}\", user_input)",
+      "enabled": true,
+      "tags": ["format", "string"],
+      "confidence": "medium"
+    }
+  ]
+}

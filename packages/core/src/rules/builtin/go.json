@@ -1,0 +1,456 @@
+{
+  "name": "Go Security Rules",
+  "version": "1.0.0",
+  "description": "Security rules for Go applications",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "GO001",
+      "name": "SQL Injection",
+      "description": "User input concatenated into SQL queries allows database manipulation.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "db\\.(Query|Exec)\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "db.Query/Exec with concatenation"
+        },
+        {
+          "pattern": "fmt\\.Sprintf\\s*\\([^)]*SELECT.*%s",
+          "flags": "gi",
+          "description": "Sprintf SQL query"
+        },
+        {
+          "pattern": "fmt\\.Sprintf\\s*\\([^)]*INSERT.*%s",
+          "flags": "gi",
+          "description": "Sprintf INSERT query"
+        },
+        {
+          "pattern": "fmt\\.Sprintf\\s*\\([^)]*UPDATE.*%s",
+          "flags": "gi",
+          "description": "Sprintf UPDATE query"
+        },
+        {
+          "pattern": "fmt\\.Sprintf\\s*\\([^)]*DELETE.*%s",
+          "flags": "gi",
+          "description": "Sprintf DELETE query"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\$\\d|\\?|Prepare|QueryRow.*\\,",
+          "flags": "gi",
+          "description": "Parameterized query"
+        }
+      ],
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use parameterized queries with ? or $1 placeholders.",
+      "badExample": "db.Query(\"SELECT * FROM users WHERE id = \" + id)",
+      "goodExample": "db.Query(\"SELECT * FROM users WHERE id = $1\", id)",
+      "enabled": true,
+      "tags": ["sql", "database"],
+      "confidence": "high"
+    },
+    {
+      "id": "GO002",
+      "name": "Command Injection",
+      "description": "User input in exec commands allows arbitrary command execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "exec\\.Command\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "exec.Command with concatenation"
+        },
+        {
+          "pattern": "exec\\.Command\\s*\\([^,)]*fmt\\.Sprintf",
+          "flags": "gi",
+          "description": "exec.Command with Sprintf"
+        },
+        {
+          "pattern": "exec\\.Command\\s*\\(\\s*\"sh\"\\s*,\\s*\"-c\"",
+          "flags": "gi",
+          "description": "Shell execution"
+        },
+        {
+          "pattern": "exec\\.Command\\s*\\(\\s*\"bash\"\\s*,\\s*\"-c\"",
+          "flags": "gi",
+          "description": "Bash execution"
+        }
+      ],
+      "cwe": "CWE-78",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Pass arguments as separate parameters, avoid shell execution.",
+      "badExample": "exec.Command(\"sh\", \"-c\", \"echo \" + userInput)",
+      "goodExample": "exec.Command(\"echo\", sanitizedInput)",
+      "enabled": true,
+      "tags": ["command", "os", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "GO003",
+      "name": "Path Traversal",
+      "description": "User input in file paths can access files outside intended directory.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "os\\.Open\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "os.Open with concatenation"
+        },
+        {
+          "pattern": "ioutil\\.ReadFile\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "ioutil.ReadFile with concatenation"
+        },
+        {
+          "pattern": "os\\.ReadFile\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "os.ReadFile with concatenation"
+        },
+        {
+          "pattern": "filepath\\.Join\\s*\\([^)]*r\\.(URL|Form)",
+          "flags": "gi",
+          "description": "filepath.Join with request data"
+        },
+        {
+          "pattern": "http\\.ServeFile\\s*\\([^)]*\\+",
+          "flags": "gi",
+          "description": "ServeFile with concatenation"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "filepath\\.Clean|filepath\\.Base|strings\\.HasPrefix",
+          "flags": "gi",
+          "description": "Path sanitization"
+        }
+      ],
+      "cwe": "CWE-22",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Use filepath.Clean() and validate paths are within allowed directories.",
+      "badExample": "os.Open(baseDir + filename)",
+      "goodExample": "cleanPath := filepath.Clean(filepath.Join(baseDir, filename)); if !strings.HasPrefix(cleanPath, baseDir) { return error }",
+      "enabled": true,
+      "tags": ["file", "lfi", "path"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GO004",
+      "name": "Hardcoded Credentials",
+      "description": "Passwords and secrets hardcoded in source code can be extracted.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "(?:password|passwd|secret|apiKey|api_key|token)\\s*(?::=|=)\\s*\"[^\"]{4,}\"",
+          "flags": "gi",
+          "description": "Hardcoded credential"
+        },
+        {
+          "pattern": "const\\s+(?:password|secret|apiKey)\\s*=\\s*\"[^\"]+\"",
+          "flags": "gi",
+          "description": "Const credential"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "os\\.Getenv|viper\\.|config\\.",
+          "flags": "gi",
+          "description": "Environment/config usage"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Use environment variables or configuration management for secrets.",
+      "enabled": true,
+      "tags": ["secrets", "credentials"],
+      "confidence": "high"
+    },
+    {
+      "id": "GO005",
+      "name": "Insecure TLS Configuration",
+      "description": "Weak TLS configuration allows man-in-the-middle attacks.",
+      "severity": "high",
+      "category": "cryptography",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "InsecureSkipVerify\\s*:\\s*true",
+          "flags": "gi",
+          "description": "TLS verification disabled"
+        },
+        {
+          "pattern": "MinVersion\\s*:\\s*tls\\.VersionSSL30",
+          "flags": "gi",
+          "description": "SSL 3.0 enabled"
+        },
+        {
+          "pattern": "MinVersion\\s*:\\s*tls\\.VersionTLS10",
+          "flags": "gi",
+          "description": "TLS 1.0 enabled"
+        },
+        {
+          "pattern": "MinVersion\\s*:\\s*tls\\.VersionTLS11",
+          "flags": "gi",
+          "description": "TLS 1.1 enabled"
+        }
+      ],
+      "cwe": "CWE-295",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Enable certificate verification and use TLS 1.2+ minimum.",
+      "badExample": "tls.Config{InsecureSkipVerify: true}",
+      "goodExample": "tls.Config{MinVersion: tls.VersionTLS12}",
+      "enabled": true,
+      "tags": ["tls", "ssl", "crypto"],
+      "confidence": "high"
+    },
+    {
+      "id": "GO006",
+      "name": "Weak Cryptography",
+      "description": "Use of weak or deprecated cryptographic algorithms.",
+      "severity": "high",
+      "category": "cryptography",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "des\\.NewCipher",
+          "flags": "gi",
+          "description": "DES cipher"
+        },
+        {
+          "pattern": "rc4\\.NewCipher",
+          "flags": "gi",
+          "description": "RC4 cipher"
+        },
+        {
+          "pattern": "md5\\.New\\(\\)|md5\\.Sum",
+          "flags": "gi",
+          "description": "MD5 hash"
+        },
+        {
+          "pattern": "sha1\\.New\\(\\)|sha1\\.Sum",
+          "flags": "gi",
+          "description": "SHA-1 hash"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "// (checksum|fingerprint|non-crypto|legacy)",
+          "flags": "gi",
+          "description": "Non-security usage documented"
+        }
+      ],
+      "cwe": "CWE-327",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "remediation": "Use AES-GCM for encryption, SHA-256 or SHA-3 for hashing.",
+      "badExample": "md5.Sum(data)",
+      "goodExample": "sha256.Sum256(data)",
+      "enabled": true,
+      "tags": ["crypto", "hash"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GO007",
+      "name": "SSRF Vulnerability",
+      "description": "User input in HTTP requests can access internal services.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "http\\.Get\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "http.Get with concatenation"
+        },
+        {
+          "pattern": "http\\.Post\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "http.Post with concatenation"
+        },
+        {
+          "pattern": "http\\.NewRequest\\s*\\([^)]*fmt\\.Sprintf",
+          "flags": "gi",
+          "description": "NewRequest with Sprintf"
+        },
+        {
+          "pattern": "http\\.NewRequest\\s*\\([^)]*r\\.(URL|Form)",
+          "flags": "gi",
+          "description": "NewRequest with user input"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "url\\.Parse|whitelist|allowedHosts",
+          "flags": "gi",
+          "description": "URL validation"
+        }
+      ],
+      "cwe": "CWE-918",
+      "owasp": "A10:2021-Server-Side Request Forgery",
+      "remediation": "Validate URLs against allowlist, block internal IP ranges.",
+      "enabled": true,
+      "tags": ["ssrf", "network"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GO008",
+      "name": "Uncontrolled Format String",
+      "description": "User input as format string can leak memory or crash the application.",
+      "severity": "medium",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "fmt\\.Printf\\s*\\(\\s*\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "Printf with variable format"
+        },
+        {
+          "pattern": "fmt\\.Sprintf\\s*\\(\\s*\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "Sprintf with variable format"
+        },
+        {
+          "pattern": "log\\.Printf\\s*\\(\\s*\\w+\\s*\\)",
+          "flags": "gi",
+          "description": "log.Printf with variable format"
+        }
+      ],
+      "cwe": "CWE-134",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Always use format string literals, pass user input as arguments.",
+      "badExample": "fmt.Printf(userInput)",
+      "goodExample": "fmt.Printf(\"%s\", userInput)",
+      "enabled": true,
+      "tags": ["format", "string"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GO009",
+      "name": "Race Condition",
+      "description": "Unsynchronized access to shared data can cause data corruption.",
+      "severity": "medium",
+      "category": "other",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "go\\s+func\\s*\\([^)]*\\)\\s*\\{[^}]*\\w+\\s*=",
+          "flags": "gi",
+          "multiline": true,
+          "description": "Goroutine modifying shared variable"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "sync\\.|atomic\\.|chan\\s|<-",
+          "flags": "gi",
+          "description": "Synchronization present"
+        }
+      ],
+      "cwe": "CWE-362",
+      "remediation": "Use sync.Mutex, sync/atomic, or channels for concurrent access.",
+      "enabled": true,
+      "tags": ["concurrency", "race"],
+      "confidence": "low"
+    },
+    {
+      "id": "GO010",
+      "name": "Unsafe Package Usage",
+      "description": "The unsafe package bypasses Go's memory safety guarantees.",
+      "severity": "medium",
+      "category": "other",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "import\\s+\"unsafe\"",
+          "flags": "gi",
+          "description": "unsafe import"
+        },
+        {
+          "pattern": "unsafe\\.Pointer",
+          "flags": "gi",
+          "description": "unsafe.Pointer usage"
+        }
+      ],
+      "cwe": "CWE-787",
+      "remediation": "Avoid unsafe package unless absolutely necessary. Document all uses.",
+      "enabled": true,
+      "tags": ["unsafe", "memory"],
+      "confidence": "high"
+    },
+    {
+      "id": "GO011",
+      "name": "Open Redirect",
+      "description": "User-controlled redirect URLs can be used for phishing attacks.",
+      "severity": "medium",
+      "category": "injection",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "http\\.Redirect\\s*\\([^)]*r\\.(URL|Form)",
+          "flags": "gi",
+          "description": "Redirect with request data"
+        },
+        {
+          "pattern": "http\\.Redirect\\s*\\([^)]*\\+",
+          "flags": "gi",
+          "description": "Redirect with concatenation"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "url\\.Parse|strings\\.HasPrefix|allowedDomains",
+          "flags": "gi",
+          "description": "URL validation"
+        }
+      ],
+      "cwe": "CWE-601",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Validate redirect URLs against allowlist of trusted domains.",
+      "enabled": true,
+      "tags": ["redirect", "phishing"],
+      "confidence": "medium"
+    },
+    {
+      "id": "GO012",
+      "name": "Integer Overflow",
+      "description": "Integer overflow can lead to unexpected behavior or security issues.",
+      "severity": "medium",
+      "category": "input_validation",
+      "languages": ["go"],
+      "patterns": [
+        {
+          "pattern": "int\\s*\\(.*\\)\\s*\\*\\s*int\\s*\\(",
+          "flags": "gi",
+          "description": "Integer multiplication"
+        },
+        {
+          "pattern": "strconv\\.Atoi.*int32|strconv\\.Atoi.*int16",
+          "flags": "gi",
+          "description": "Atoi to smaller int"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "math\\.MaxInt|overflow|bound",
+          "flags": "gi",
+          "description": "Overflow check present"
+        }
+      ],
+      "cwe": "CWE-190",
+      "remediation": "Check for overflow before arithmetic operations, use safe conversion.",
+      "enabled": true,
+      "tags": ["integer", "overflow"],
+      "confidence": "low"
+    }
+  ]
+}

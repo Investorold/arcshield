@@ -1,0 +1,445 @@
+{
+  "name": "Java Security Rules",
+  "version": "1.0.0",
+  "description": "Security rules for Java applications",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "JAVA001",
+      "name": "SQL Injection",
+      "description": "User input concatenated into SQL queries allows database manipulation.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "createStatement\\s*\\(\\s*\\).*execute",
+          "flags": "gi",
+          "description": "Statement with execute"
+        },
+        {
+          "pattern": "executeQuery\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in executeQuery"
+        },
+        {
+          "pattern": "executeUpdate\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Concatenation in executeUpdate"
+        },
+        {
+          "pattern": "\"SELECT.*\"\\s*\\+",
+          "flags": "gi",
+          "description": "SQL string concatenation"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "PreparedStatement|setString|setInt|setLong",
+          "flags": "gi",
+          "description": "Parameterized query"
+        }
+      ],
+      "cwe": "CWE-89",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use PreparedStatement with parameterized queries instead of string concatenation.",
+      "badExample": "stmt.executeQuery(\"SELECT * FROM users WHERE id = \" + userId)",
+      "goodExample": "PreparedStatement ps = conn.prepareStatement(\"SELECT * FROM users WHERE id = ?\"); ps.setString(1, userId);",
+      "enabled": true,
+      "tags": ["sql", "database", "injection"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA002",
+      "name": "Command Injection",
+      "description": "User input in runtime commands allows arbitrary command execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "Runtime\\.getRuntime\\(\\)\\.exec\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "Runtime.exec with concatenation"
+        },
+        {
+          "pattern": "ProcessBuilder\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "ProcessBuilder with concatenation"
+        },
+        {
+          "pattern": "new\\s+ProcessBuilder\\s*\\([^)]*\\$\\{",
+          "flags": "gi",
+          "description": "ProcessBuilder with interpolation"
+        }
+      ],
+      "cwe": "CWE-78",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use ProcessBuilder with argument array, validate and sanitize all user input.",
+      "badExample": "Runtime.getRuntime().exec(\"cmd /c \" + userInput)",
+      "goodExample": "new ProcessBuilder(\"cmd\", \"/c\", \"echo\", sanitizedInput).start()",
+      "enabled": true,
+      "tags": ["command", "os", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA003",
+      "name": "Insecure Deserialization",
+      "description": "Deserializing untrusted data can lead to remote code execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "ObjectInputStream\\s*\\(",
+          "flags": "gi",
+          "description": "ObjectInputStream usage"
+        },
+        {
+          "pattern": "\\.readObject\\s*\\(",
+          "flags": "gi",
+          "description": "readObject call"
+        },
+        {
+          "pattern": "XMLDecoder\\s*\\(",
+          "flags": "gi",
+          "description": "XMLDecoder usage"
+        },
+        {
+          "pattern": "XStream\\s*\\(\\s*\\)\\.fromXML",
+          "flags": "gi",
+          "description": "XStream deserialization"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "ObjectInputFilter|ValidatingObjectInputStream",
+          "flags": "gi",
+          "description": "Input validation present"
+        }
+      ],
+      "cwe": "CWE-502",
+      "owasp": "A08:2021-Software and Data Integrity Failures",
+      "remediation": "Avoid deserializing untrusted data. Use ObjectInputFilter or safer formats like JSON.",
+      "enabled": true,
+      "tags": ["deserialization", "rce"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA004",
+      "name": "Path Traversal",
+      "description": "User input in file paths can access files outside intended directory.",
+      "severity": "high",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "new\\s+File\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "File constructor with concatenation"
+        },
+        {
+          "pattern": "new\\s+FileInputStream\\s*\\(.*\\+",
+          "flags": "gi",
+          "description": "FileInputStream with concatenation"
+        },
+        {
+          "pattern": "Paths\\.get\\s*\\(.*request\\.",
+          "flags": "gi",
+          "description": "Paths.get with request data"
+        },
+        {
+          "pattern": "Files\\.read.*\\(.*getParameter",
+          "flags": "gi",
+          "description": "Files.read with parameter"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "normalize\\(\\)|getCanonicalPath|FilenameUtils\\.getName",
+          "flags": "gi",
+          "description": "Path sanitization"
+        }
+      ],
+      "cwe": "CWE-22",
+      "owasp": "A01:2021-Broken Access Control",
+      "remediation": "Use getCanonicalPath() to resolve paths, validate against allowed directories.",
+      "badExample": "new File(baseDir + request.getParameter(\"file\"))",
+      "goodExample": "File file = new File(baseDir, filename).getCanonicalFile(); if (!file.getPath().startsWith(baseDir)) throw new SecurityException();",
+      "enabled": true,
+      "tags": ["file", "lfi", "path"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JAVA005",
+      "name": "Hardcoded Credentials",
+      "description": "Passwords and secrets hardcoded in source code can be extracted.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "(?:password|passwd|pwd|secret|apiKey|api_key)\\s*=\\s*\"[^\"]{4,}\"",
+          "flags": "gi",
+          "description": "Hardcoded credential"
+        },
+        {
+          "pattern": "setPassword\\s*\\(\\s*\"[^\"]+\"\\s*\\)",
+          "flags": "gi",
+          "description": "setPassword with literal"
+        },
+        {
+          "pattern": "new\\s+UsernamePasswordCredentials\\s*\\([^)]*\"[^\"]+\"",
+          "flags": "gi",
+          "description": "Hardcoded UsernamePasswordCredentials"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "getenv|getProperty|System\\.getenv",
+          "flags": "gi",
+          "description": "Environment variable"
+        }
+      ],
+      "cwe": "CWE-798",
+      "owasp": "A07:2021-Identification and Authentication Failures",
+      "remediation": "Use environment variables or secure vaults for credentials.",
+      "enabled": true,
+      "tags": ["secrets", "credentials", "hardcoded"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA006",
+      "name": "Weak Cryptography",
+      "description": "Use of weak or deprecated cryptographic algorithms.",
+      "severity": "high",
+      "category": "cryptography",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "Cipher\\.getInstance\\s*\\(\\s*\"DES",
+          "flags": "gi",
+          "description": "DES cipher"
+        },
+        {
+          "pattern": "Cipher\\.getInstance\\s*\\(\\s*\"RC4",
+          "flags": "gi",
+          "description": "RC4 cipher"
+        },
+        {
+          "pattern": "MessageDigest\\.getInstance\\s*\\(\\s*\"MD5\"",
+          "flags": "gi",
+          "description": "MD5 hash"
+        },
+        {
+          "pattern": "MessageDigest\\.getInstance\\s*\\(\\s*\"SHA-1\"",
+          "flags": "gi",
+          "description": "SHA-1 hash"
+        },
+        {
+          "pattern": "Cipher\\.getInstance\\s*\\(\\s*\"AES/ECB",
+          "flags": "gi",
+          "description": "AES ECB mode"
+        }
+      ],
+      "cwe": "CWE-327",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "remediation": "Use AES-256 with GCM mode, SHA-256 or SHA-3 for hashing.",
+      "badExample": "Cipher.getInstance(\"DES/ECB/PKCS5Padding\")",
+      "goodExample": "Cipher.getInstance(\"AES/GCM/NoPadding\")",
+      "enabled": true,
+      "tags": ["crypto", "encryption", "hash"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA007",
+      "name": "XXE Injection",
+      "description": "XML External Entity injection allows file disclosure and SSRF.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "DocumentBuilderFactory\\.newInstance\\(\\)",
+          "flags": "gi",
+          "description": "DocumentBuilderFactory without secure config"
+        },
+        {
+          "pattern": "SAXParserFactory\\.newInstance\\(\\)",
+          "flags": "gi",
+          "description": "SAXParserFactory without secure config"
+        },
+        {
+          "pattern": "XMLInputFactory\\.newInstance\\(\\)",
+          "flags": "gi",
+          "description": "XMLInputFactory without secure config"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "setFeature.*XMLConstants\\.FEATURE_SECURE_PROCESSING|setFeature.*disallow-doctype-decl|setProperty.*accessExternalDTD",
+          "flags": "gi",
+          "description": "XXE protection enabled"
+        }
+      ],
+      "cwe": "CWE-611",
+      "owasp": "A05:2021-Security Misconfiguration",
+      "remediation": "Disable DTDs and external entities: factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)",
+      "enabled": true,
+      "tags": ["xxe", "xml", "injection"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JAVA008",
+      "name": "LDAP Injection",
+      "description": "User input in LDAP queries allows authentication bypass and data access.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "search\\s*\\([^,]*\\+.*getParameter",
+          "flags": "gi",
+          "description": "LDAP search with user input"
+        },
+        {
+          "pattern": "\"\\(uid=.*\\+",
+          "flags": "gi",
+          "description": "LDAP filter concatenation"
+        },
+        {
+          "pattern": "NamingEnumeration.*search.*\\+",
+          "flags": "gi",
+          "description": "NamingEnumeration search with concat"
+        }
+      ],
+      "cwe": "CWE-90",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Use parameterized LDAP queries or escape special characters: \\*, \\(, \\), \\\\, \\00",
+      "enabled": true,
+      "tags": ["ldap", "injection", "directory"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA009",
+      "name": "Insecure Random",
+      "description": "java.util.Random is predictable and unsuitable for security purposes.",
+      "severity": "medium",
+      "category": "cryptography",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "new\\s+Random\\s*\\(",
+          "flags": "gi",
+          "description": "java.util.Random usage"
+        },
+        {
+          "pattern": "Math\\.random\\s*\\(",
+          "flags": "gi",
+          "description": "Math.random usage"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "SecureRandom",
+          "flags": "gi",
+          "description": "SecureRandom used"
+        }
+      ],
+      "cwe": "CWE-330",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "remediation": "Use java.security.SecureRandom for security-sensitive random values.",
+      "badExample": "new Random().nextInt()",
+      "goodExample": "SecureRandom.getInstanceStrong().nextInt()",
+      "enabled": true,
+      "tags": ["random", "crypto"],
+      "confidence": "low"
+    },
+    {
+      "id": "JAVA010",
+      "name": "Log Injection",
+      "description": "User input in log messages can forge log entries or exploit log viewers.",
+      "severity": "medium",
+      "category": "injection",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "logger\\.(info|warn|error|debug)\\s*\\(.*\\+.*request\\.",
+          "flags": "gi",
+          "description": "Logger with request data concatenation"
+        },
+        {
+          "pattern": "log\\.(info|warn|error|debug)\\s*\\(.*getParameter",
+          "flags": "gi",
+          "description": "Log with parameter"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\{\\}|%s|encode|sanitize",
+          "flags": "gi",
+          "description": "Parameterized logging or sanitization"
+        }
+      ],
+      "cwe": "CWE-117",
+      "owasp": "A09:2021-Security Logging and Monitoring Failures",
+      "remediation": "Use parameterized logging: logger.info(\"User: {}\", sanitize(username))",
+      "enabled": true,
+      "tags": ["logging", "injection"],
+      "confidence": "medium"
+    },
+    {
+      "id": "JAVA011",
+      "name": "Spring Expression Injection",
+      "description": "User input in Spring Expression Language (SpEL) allows code execution.",
+      "severity": "critical",
+      "category": "injection",
+      "languages": ["java"],
+      "frameworks": ["any"],
+      "patterns": [
+        {
+          "pattern": "SpelExpressionParser\\(\\)\\.parseExpression\\s*\\(.*request",
+          "flags": "gi",
+          "description": "SpEL with request data"
+        },
+        {
+          "pattern": "ExpressionParser.*parseExpression.*getParameter",
+          "flags": "gi",
+          "description": "Expression parser with user input"
+        },
+        {
+          "pattern": "@Value\\s*\\(\\s*\"#\\{.*\\+",
+          "flags": "gi",
+          "description": "Dynamic @Value expression"
+        }
+      ],
+      "cwe": "CWE-917",
+      "owasp": "A03:2021-Injection",
+      "remediation": "Never pass user input to SpEL. Use SimpleEvaluationContext for restricted expressions.",
+      "enabled": true,
+      "tags": ["spring", "spel", "expression"],
+      "confidence": "high"
+    },
+    {
+      "id": "JAVA012",
+      "name": "Null Cipher",
+      "description": "NullCipher provides no encryption - data transmitted in plaintext.",
+      "severity": "critical",
+      "category": "cryptography",
+      "languages": ["java"],
+      "patterns": [
+        {
+          "pattern": "new\\s+NullCipher\\s*\\(",
+          "flags": "gi",
+          "description": "NullCipher usage"
+        }
+      ],
+      "cwe": "CWE-327",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "remediation": "Use a real cipher like AES-GCM. Never use NullCipher in production.",
+      "enabled": true,
+      "tags": ["crypto", "encryption"],
+      "confidence": "high"
+    }
+  ]
+}
