@@ -65,22 +65,52 @@ export function useScan(id: string | undefined) {
       return;
     }
 
+    let cancelled = false;
+    let retries = 3;
+
     const fetchScan = async () => {
       try {
         setLoading(true);
+
+        // First check if scan is still running
+        const statusRes = await fetch(`${API_BASE}/scans/${id}/status`);
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          if (status.status === 'pending' || status.status === 'running') {
+            // Scan still in progress, poll again
+            if (!cancelled) {
+              setTimeout(fetchScan, 2000);
+            }
+            return;
+          }
+        }
+
+        // Try to get the scan
         const response = await fetch(`${API_BASE}/scans/${id}`);
-        if (!response.ok) throw new Error('Scan not found');
+        if (!response.ok) {
+          if (retries > 0) {
+            retries--;
+            if (!cancelled) setTimeout(fetchScan, 1000);
+            return;
+          }
+          throw new Error('Scan not found');
+        }
         const data = await response.json();
-        setScan(data);
-        setError(null);
+        if (!cancelled) {
+          setScan(data);
+          setError(null);
+          setLoading(false);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+          setLoading(false);
+        }
       }
     };
 
     fetchScan();
+    return () => { cancelled = true; };
   }, [id]);
 
   return { scan, loading, error };
