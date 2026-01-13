@@ -77,8 +77,8 @@ export default function Report() {
         <div className="text-right text-sm text-gray-400">
           <p>Scan ID: {scan.id}</p>
           <p>{new Date(scan.timestamp).toLocaleString()}</p>
-          <p>Duration: {(scan.duration / 1000).toFixed(1)}s</p>
-          <p>Cost: ${scan.cost.toFixed(4)}</p>
+          <p>Duration: {((scan.duration || 0) / 1000).toFixed(1)}s</p>
+          <p>Cost: ${(scan.cost || 0).toFixed(4)}</p>
         </div>
       </div>
 
@@ -91,16 +91,16 @@ export default function Report() {
             <div>
               <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Vulnerability Count</p>
               <SeverityStats
-                critical={scan.summary.critical}
-                high={scan.summary.high}
-                medium={scan.summary.medium}
-                low={scan.summary.low}
-                info={scan.summary.info}
+                critical={scan.summary?.critical || 0}
+                high={scan.summary?.high || 0}
+                medium={scan.summary?.medium || 0}
+                low={scan.summary?.low || 0}
+                info={scan.summary?.info || 0}
               />
               <p className="text-sm text-gray-400 mt-4">
-                Total Issues: {scan.summary.totalIssues}
+                Total Issues: {scan.summary?.totalIssues || 0}
               </p>
-              {scan.summary.totalIssues === 0 && (
+              {(scan.summary?.totalIssues || 0) === 0 && (
                 <p className="text-sm text-green-400 mt-2">No actual code vulnerabilities found</p>
               )}
             </div>
@@ -109,7 +109,7 @@ export default function Report() {
 
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Badge Status</h2>
-          <ArcBadge eligible={scan.badge.eligible} reason={scan.badge.reason} />
+          <ArcBadge eligible={scan.badge?.eligible || false} reason={scan.badge?.reason || ''} />
 
           {/* Badge Embed Section */}
           <div className="mt-6 pt-4 border-t border-gray-700">
@@ -165,7 +165,7 @@ export default function Report() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Threat Distribution (STRIDE)</h2>
-          <ThreatChart data={scan.threatModel.summary.byCategory} />
+          <ThreatChart data={scan.threatModel?.summary?.byCategory || {}} />
         </div>
 
         <div className="bg-gray-800 rounded-lg p-6">
@@ -173,12 +173,12 @@ export default function Report() {
           <div className="space-y-4">
             <div>
               <p className="text-gray-400 text-sm">Application Type</p>
-              <p className="font-medium">{scan.assessment.architecture.type}</p>
+              <p className="font-medium">{scan.assessment?.architecture?.type || 'Unknown'}</p>
             </div>
             <div>
               <p className="text-gray-400 text-sm">Frameworks</p>
               <div className="flex flex-wrap gap-2 mt-1">
-                {scan.assessment.architecture.frameworks.map((fw) => (
+                {(scan.assessment?.architecture?.frameworks || []).map((fw) => (
                   <span key={fw} className="bg-gray-700 px-2 py-1 rounded text-sm">
                     {fw}
                   </span>
@@ -187,11 +187,11 @@ export default function Report() {
             </div>
             <div>
               <p className="text-gray-400 text-sm">Files Analyzed</p>
-              <p className="font-medium">{scan.assessment.fileCount} files ({scan.assessment.totalLines} lines)</p>
+              <p className="font-medium">{scan.assessment?.fileCount || 0} files ({scan.assessment?.totalLines || 0} lines)</p>
             </div>
             <div>
               <p className="text-gray-400 text-sm">Entry Points</p>
-              <p className="font-medium">{scan.assessment.architecture.entryPoints.length}</p>
+              <p className="font-medium">{scan.assessment?.architecture?.entryPoints?.length || 0}</p>
             </div>
           </div>
         </div>
@@ -201,7 +201,7 @@ export default function Report() {
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-8">
         <h2 className="text-lg font-semibold mb-4">Threat Model</h2>
         <div className="space-y-3 max-h-96 overflow-y-auto">
-          {scan.threatModel.threats.map((threat) => (
+          {(scan.threatModel?.threats || []).map((threat) => (
             <div key={threat.id} className="bg-gray-700/30 border border-gray-600/50 rounded-lg p-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -224,7 +224,7 @@ export default function Report() {
             </div>
           ))}
         </div>
-        {scan.threatModel.threats.length === 0 && (
+        {(scan.threatModel?.threats?.length || 0) === 0 && (
           <p className="text-gray-500 text-center py-4">No threats identified</p>
         )}
       </div>
