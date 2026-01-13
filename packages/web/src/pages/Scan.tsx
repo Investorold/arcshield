@@ -3,6 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStartScan } from '../hooks/useScans';
 import { useGitHubAuth, useGitHubRepos, useScanRepo } from '../hooks/useAuth';
 
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: any[] }) => Promise<any>;
+      on?: (event: string, callback: (...args: any[]) => void) => void;
+    };
+  }
+}
+
 type ScanType = 'github-connected' | 'github-url' | 'upload';
 type ScanTier = 'free' | 'trial' | 'paid';
 
@@ -24,6 +33,7 @@ export default function Scan() {
   const [isDragging, setIsDragging] = useState(false);
   const [repoSearch, setRepoSearch] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
+  const [walletConnected, setWalletConnected] = useState(false);
   const [trialStatus, setTrialStatus] = useState<{ hasUsedTrial: boolean; loading: boolean }>({ hasUsedTrial: false, loading: false });
   const [paymentState, setPaymentState] = useState<{
     paymentId?: string;
@@ -55,6 +65,56 @@ export default function Scan() {
   const status = scanType === 'github-connected' ? repoStatus : urlStatus;
   const loading = scanType === 'github-connected' ? repoLoading : urlLoading;
   const error = scanType === 'github-connected' ? repoError : urlError;
+
+  // Connect wallet function
+  const connectWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      alert('Please install MetaMask');
+      return;
+    }
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts && accounts.length > 0) {
+        setWalletAddress(accounts[0]);
+        setWalletConnected(true);
+      }
+    } catch (err: any) {
+      if (err.code !== 4001) { // User rejected
+        console.error('Wallet connection error:', err);
+      }
+    }
+  };
+
+  // Disconnect wallet
+  const disconnectWallet = () => {
+    setWalletAddress('');
+    setWalletConnected(false);
+    setTrialStatus({ hasUsedTrial: false, loading: false });
+  };
+
+  // Check for existing wallet connection on mount
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.request({ method: 'eth_accounts' })
+        .then((accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+            setWalletConnected(true);
+          }
+        })
+        .catch(() => {});
+
+      // Listen for account changes
+      window.ethereum.on?.('accountsChanged', (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          setWalletConnected(true);
+        } else {
+          disconnectWallet();
+        }
+      });
+    }
+  }, []);
 
   // Check trial status when wallet address changes
   useEffect(() => {
@@ -274,7 +334,7 @@ export default function Scan() {
     if (scanType === 'github-connected' && !selectedRepo) return false;
     if (scanType === 'github-url' && !githubUrl.trim()) return false;
     if (scanType === 'upload' && !selectedFile) return false;
-    if (scanTier === 'trial' && (!walletAddress || trialStatus.hasUsedTrial)) return false;
+    if (scanTier === 'trial' && (!walletConnected || trialStatus.hasUsedTrial)) return false;
     if (scanTier === 'paid') return false; // Paid uses separate flow
     return true;
   };
@@ -539,18 +599,40 @@ export default function Scan() {
           </button>
         </div>
 
-        {/* Wallet Input for Trial/Paid */}
+        {/* Wallet Connection for Trial/Paid */}
         {(scanTier === 'trial' || scanTier === 'paid') && (
           <div className="mb-5">
-            <input
-              type="text"
-              value={walletAddress}
-              onChange={(e) => setWalletAddress(e.target.value)}
-              placeholder="Wallet address (0x...)"
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400"
-            />
-            {scanTier === 'trial' && walletAddress && !trialStatus.loading && (
-              <p className={`text-xs mt-1 ${trialStatus.hasUsedTrial ? 'text-red-400' : 'text-green-400'}`}>
+            {!walletConnected ? (
+              <button
+                type="button"
+                onClick={connectWallet}
+                className="w-full bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M32.9582 1L19.8241 10.7183L22.2665 4.99099L32.9582 1Z" fill="#E17726"/>
+                  <path d="M2.66296 1L15.6821 10.809L13.3541 4.99098L2.66296 1Z" fill="#E27625"/>
+                  <path d="M28.2295 23.5334L24.7346 28.872L32.2332 30.9315L34.3804 23.6501L28.2295 23.5334Z" fill="#E27625"/>
+                  <path d="M1.27271 23.6501L3.40608 30.9315L10.8912 28.872L7.40978 23.5334L1.27271 23.6501Z" fill="#E27625"/>
+                </svg>
+                Connect Wallet
+              </button>
+            ) : (
+              <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-sm font-mono">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={disconnectWallet}
+                  className="text-xs text-gray-400 hover:text-white"
+                >
+                  Disconnect
+                </button>
+              </div>
+            )}
+            {scanTier === 'trial' && walletConnected && !trialStatus.loading && (
+              <p className={`text-xs mt-2 ${trialStatus.hasUsedTrial ? 'text-red-400' : 'text-green-400'}`}>
                 {trialStatus.hasUsedTrial ? 'Trial already used' : 'Trial available'}
               </p>
             )}
@@ -564,7 +646,7 @@ export default function Scan() {
               <button
                 type="button"
                 onClick={createPayment}
-                disabled={!getTargetUrl() || !walletAddress}
+                disabled={!getTargetUrl() || !walletConnected}
                 className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 text-black font-medium py-3 rounded-lg"
               >
                 Create Payment
