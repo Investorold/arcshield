@@ -161,6 +161,73 @@ export default function Report() {
         </div>
       </div>
 
+      {/* First-Party vs Third-Party Breakdown (OWASP/NIST SBOM aligned) */}
+      {(scan.firstPartySummary || scan.thirdPartySummary) && (
+        <div className="bg-gray-800 rounded-lg p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-4">
+            Code Ownership Breakdown
+            <span className="text-xs text-gray-500 font-normal ml-2">(OWASP/NIST SBOM)</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* First-Party (Your Code) */}
+            <div className="bg-gray-700/30 border border-gray-600/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">🏠</span>
+                <h3 className="font-medium">Your Code</h3>
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">First-Party</span>
+              </div>
+              <p className="text-2xl font-bold mb-2">{scan.firstPartySummary?.totalIssues || 0} issues</p>
+              <div className="flex gap-4 text-sm">
+                {(scan.firstPartySummary?.critical || 0) > 0 && (
+                  <span className="text-red-400">{scan.firstPartySummary?.critical} critical</span>
+                )}
+                {(scan.firstPartySummary?.high || 0) > 0 && (
+                  <span className="text-orange-400">{scan.firstPartySummary?.high} high</span>
+                )}
+                {(scan.firstPartySummary?.medium || 0) > 0 && (
+                  <span className="text-yellow-400">{scan.firstPartySummary?.medium} medium</span>
+                )}
+                {(scan.firstPartySummary?.low || 0) > 0 && (
+                  <span className="text-green-400">{scan.firstPartySummary?.low} low</span>
+                )}
+                {(scan.firstPartySummary?.totalIssues || 0) === 0 && (
+                  <span className="text-green-400">No issues found!</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">Issues in code you wrote - prioritize fixing these first.</p>
+            </div>
+
+            {/* Third-Party (Dependencies) */}
+            <div className="bg-gray-700/30 border border-gray-600/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">📦</span>
+                <h3 className="font-medium">Dependencies</h3>
+                <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">Third-Party</span>
+              </div>
+              <p className="text-2xl font-bold mb-2">{scan.thirdPartySummary?.totalIssues || 0} issues</p>
+              <div className="flex gap-4 text-sm">
+                {(scan.thirdPartySummary?.critical || 0) > 0 && (
+                  <span className="text-red-400">{scan.thirdPartySummary?.critical} critical</span>
+                )}
+                {(scan.thirdPartySummary?.high || 0) > 0 && (
+                  <span className="text-orange-400">{scan.thirdPartySummary?.high} high</span>
+                )}
+                {(scan.thirdPartySummary?.medium || 0) > 0 && (
+                  <span className="text-yellow-400">{scan.thirdPartySummary?.medium} medium</span>
+                )}
+                {(scan.thirdPartySummary?.low || 0) > 0 && (
+                  <span className="text-green-400">{scan.thirdPartySummary?.low} low</span>
+                )}
+                {(scan.thirdPartySummary?.totalIssues || 0) === 0 && (
+                  <span className="text-green-400">No issues found!</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">Issues in node_modules, vendor, SDKs - update packages to fix.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Threat Analysis */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gray-800 rounded-lg p-6">

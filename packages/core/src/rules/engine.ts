@@ -177,8 +177,9 @@ export class RuleEngine {
         const regex = new RegExp(patternDef.pattern, flags);
 
         if (patternDef.multiline) {
-          // Multi-line pattern matching
-          const multiMatches = file.content.matchAll(new RegExp(patternDef.pattern, flags + 'm'));
+          // Multi-line pattern matching - add 'm' flag if not already present
+          const multilineFlags = flags.includes('m') ? flags : flags + 'm';
+          const multiMatches = file.content.matchAll(new RegExp(patternDef.pattern, multilineFlags));
           for (const match of multiMatches) {
             if (match.index !== undefined) {
               // Calculate line number from index

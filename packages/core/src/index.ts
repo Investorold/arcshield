@@ -18,6 +18,12 @@ import { runGenLayerScanner, hasGenLayerContracts } from './scanners/genlayer/in
 import { BADGE_THRESHOLD } from './constants.js';
 import { RuleEngine, initializeRuleEngine } from './rules/engine.js';
 import type { RuleEngineConfig, Rule, RuleSet } from './rules/types.js';
+import {
+  tagVulnerabilities,
+  splitVulnerabilities,
+  calculateSummary,
+  calculatePriorityScore,
+} from './utils/third-party-detector.js';
 
 // Export types
 export * from './types/index.js';
@@ -270,7 +276,21 @@ export class Scanner {
         vulnMap.set(key, vuln);
       }
     }
-    const deduplicatedVulns = Array.from(vulnMap.values());
+
+    // Tag vulnerabilities with third-party info and calculate priority scores
+    // Per OWASP Vulnerable Dependency Management guidance
+    const deduplicatedVulns = tagVulnerabilities(Array.from(vulnMap.values())).map(vuln => ({
+      ...vuln,
+      priorityScore: calculatePriorityScore(vuln),
+    }));
+
+    // Sort by priority score (highest first) for actionable triage
+    deduplicatedVulns.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+
+    // Split into first-party and third-party for separate reporting
+    const { firstParty, thirdParty } = splitVulnerabilities(deduplicatedVulns);
+    const firstPartySummary = calculateSummary(firstParty);
+    const thirdPartySummary = calculateSummary(thirdParty);
 
     // Create placeholder report
     const report: ScanReport = {
@@ -325,6 +345,9 @@ export class Scanner {
               arcVulns.filter(v => v.severity === 'info').length +
               genLayerVulns.filter(v => v.severity === 'info').length,
       },
+      // OWASP/NIST SBOM aligned: Separate first-party vs third-party summaries
+      firstPartySummary,
+      thirdPartySummary,
       badge: {
         eligible: false, // Will be calculated after summary is complete
         reason: '',
@@ -355,6 +378,11 @@ export class Scanner {
     console.log(`   🟠 High: ${report.summary.high}`);
     console.log(`   🟡 Medium: ${report.summary.medium}`);
     console.log(`   🟢 Low: ${report.summary.low}`);
+    console.log('');
+    // OWASP/NIST SBOM: Show first-party vs third-party breakdown
+    console.log('📊 First-Party vs Third-Party Breakdown:');
+    console.log(`   🏠 Your Code: ${firstPartySummary.totalIssues} issues (${firstPartySummary.critical} critical, ${firstPartySummary.high} high)`);
+    console.log(`   📦 Dependencies: ${thirdPartySummary.totalIssues} issues (${thirdPartySummary.critical} critical, ${thirdPartySummary.high} high)`);
 
     // Write final JSON report with all results (including smart contract findings)
     const jsonPath = path.join(workDir, 'arcshield-report.json');
@@ -386,8 +414,8 @@ export class Scanner {
     console.log(`   Loaded ${stats.total} rules across ${Object.keys(stats.byCategory).length} categories`);
 
     const matches = engine.scan(files);
-    const ruleBasedVulns = engine.toVulnerabilities(matches);
-    console.log(`   Found ${ruleBasedVulns.length} issues via pattern matching`);
+    const rawVulns = engine.toVulnerabilities(matches);
+    console.log(`   Found ${rawVulns.length} issues via pattern matching`);
 
     // Step 3: Run Arc Scanner (also pattern-based, free)
     let arcVulns: ScanReport['arcVulnerabilities'] = [];
@@ -399,6 +427,20 @@ export class Scanner {
     }
 
     const duration = Date.now() - startTime;
+
+    // Tag vulnerabilities with third-party info and priority scores (OWASP/NIST aligned)
+    const ruleBasedVulns = tagVulnerabilities(rawVulns).map(vuln => ({
+      ...vuln,
+      priorityScore: calculatePriorityScore(vuln),
+    }));
+
+    // Sort by priority score (highest first)
+    ruleBasedVulns.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+
+    // Split into first-party and third-party
+    const { firstParty, thirdParty } = splitVulnerabilities(ruleBasedVulns);
+    const firstPartySummary = calculateSummary(firstParty);
+    const thirdPartySummary = calculateSummary(thirdParty);
 
     // Build summary
     const summary = {
@@ -472,6 +514,9 @@ export class Scanner {
       arcVulnerabilities: arcVulns,
       genLayerVulnerabilities: [],
       summary,
+      // OWASP/NIST SBOM aligned: Separate first-party vs third-party summaries
+      firstPartySummary,
+      thirdPartySummary,
       badge: {
         eligible: summary.critical === 0 && summary.high === 0,
         reason: summary.critical > 0 ? `${summary.critical} critical vulnerabilities` :
@@ -488,6 +533,11 @@ export class Scanner {
     console.log(`   Cost: FREE`);
     console.log(`   Security Score: ${report.score}/100`);
     console.log(`   Total Issues: ${summary.totalIssues}`);
+    console.log('');
+    // OWASP/NIST SBOM: Show first-party vs third-party breakdown
+    console.log('📊 First-Party vs Third-Party Breakdown:');
+    console.log(`   🏠 Your Code: ${firstPartySummary.totalIssues} issues (${firstPartySummary.critical} critical, ${firstPartySummary.high} high)`);
+    console.log(`   📦 Dependencies: ${thirdPartySummary.totalIssues} issues (${thirdPartySummary.critical} critical, ${thirdPartySummary.high} high)`);
     console.log('');
     console.log('💡 For deeper analysis (STRIDE threats, AI code review),');
     console.log('   run a Full AI Scan.');

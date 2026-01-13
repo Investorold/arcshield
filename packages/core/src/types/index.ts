@@ -112,6 +112,9 @@ export interface VulnerabilityResult {
   };
 }
 
+// Dependency type classification (per OWASP guidance)
+export type DependencyType = 'direct' | 'transitive' | 'bundled' | 'vendored';
+
 export interface Vulnerability {
   id: string;
   title: string;
@@ -125,6 +128,12 @@ export interface Vulnerability {
   exploitability: string;
   remediation: string;
   aiFixPrompt: string;
+  // Third-party classification (OWASP/NIST SBOM aligned)
+  isThirdParty?: boolean;       // True if vulnerability is in third-party/dependency code
+  thirdPartySource?: string;    // e.g., "node_modules", "vendor", "sdk"
+  dependencyType?: DependencyType; // direct, transitive, bundled, or vendored
+  priorityScore?: number;       // 0-100 triage priority score
+  isTestCode?: boolean;         // True if in test files (lower production risk)
 }
 
 // Smart contract specific vulnerability
@@ -168,6 +177,23 @@ export interface ScanReport {
   arcVulnerabilities?: ArcVulnerability[];
   genLayerVulnerabilities?: GenLayerVulnerability[];
   summary: {
+    totalIssues: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  // Separate counts for your code vs dependencies
+  firstPartySummary?: {
+    totalIssues: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  thirdPartySummary?: {
     totalIssues: number;
     critical: number;
     high: number;

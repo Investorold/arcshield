@@ -10,6 +10,7 @@ export type {
   Threat,
   SmartContractVulnerability,
   ArcVulnerability,
+  DependencyType,
 } from '@arcshield/core';
 
 // Web-specific types

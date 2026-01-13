@@ -84,9 +84,17 @@ Please provide:
         className="hover:bg-gray-700/30 transition-colors cursor-pointer"
       >
         <td className="px-4 py-3">
-          <span className={`px-2 py-1 rounded text-xs font-medium ${config.color} ${config.bg}`}>
-            {config.label}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded text-xs font-medium ${config.color} ${config.bg}`}>
+              {config.label}
+            </span>
+            {/* Third-party indicator (OWASP/NIST SBOM) */}
+            {vuln.isThirdParty && (
+              <span className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400" title={`Source: ${vuln.thirdPartySource || 'dependency'}`}>
+                📦
+              </span>
+            )}
+          </div>
         </td>
         <td className="px-4 py-3 text-sm font-mono text-gray-300">{vuln.id}</td>
         <td className="px-4 py-3 text-sm text-white">{vuln.title}</td>
@@ -104,6 +112,42 @@ Please provide:
         <tr>
           <td colSpan={6} className="px-4 py-4 bg-gray-800/50">
             <div className="space-y-4">
+              {/* Third-Party Info (OWASP/NIST SBOM) */}
+              {vuln.isThirdParty && (
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-purple-400 font-medium text-sm">📦 Third-Party Dependency</span>
+                    <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
+                      {vuln.dependencyType || 'dependency'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-300">
+                    Source: {vuln.thirdPartySource || 'node_modules'} •
+                    Fix by updating the package or using a different version.
+                  </p>
+                </div>
+              )}
+
+              {/* Priority Score */}
+              {vuln.priorityScore !== undefined && (
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-gray-500">Priority Score:</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          vuln.priorityScore >= 70 ? 'bg-red-500' :
+                          vuln.priorityScore >= 50 ? 'bg-orange-500' :
+                          vuln.priorityScore >= 30 ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}
+                        style={{ width: `${vuln.priorityScore}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-400">{vuln.priorityScore}/100</span>
+                  </div>
+                </div>
+              )}
+
               {/* Description */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-300 mb-1">Description</h4>
