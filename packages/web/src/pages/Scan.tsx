@@ -69,7 +69,7 @@ export default function Scan() {
   // Connect wallet function
   const connectWallet = async () => {
     if (typeof window.ethereum === 'undefined') {
-      alert('Please install MetaMask');
+      alert('No wallet detected');
       return;
     }
     try {
@@ -608,11 +608,8 @@ export default function Scan() {
                 onClick={connectWallet}
                 className="w-full bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2"
               >
-                <svg className="w-5 h-5" viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M32.9582 1L19.8241 10.7183L22.2665 4.99099L32.9582 1Z" fill="#E17726"/>
-                  <path d="M2.66296 1L15.6821 10.809L13.3541 4.99098L2.66296 1Z" fill="#E27625"/>
-                  <path d="M28.2295 23.5334L24.7346 28.872L32.2332 30.9315L34.3804 23.6501L28.2295 23.5334Z" fill="#E27625"/>
-                  <path d="M1.27271 23.6501L3.40608 30.9315L10.8912 28.872L7.40978 23.5334L1.27271 23.6501Z" fill="#E27625"/>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
                 Connect Wallet
               </button>
