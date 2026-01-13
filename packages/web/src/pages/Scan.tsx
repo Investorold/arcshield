@@ -21,7 +21,6 @@ export default function Scan() {
   const [selectedRepo, setSelectedRepo] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [model, setModel] = useState('haiku');
-  const [provider, setProvider] = useState('anthropic');
   const [isDragging, setIsDragging] = useState(false);
   const [repoSearch, setRepoSearch] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
@@ -32,6 +31,7 @@ export default function Scan() {
     treasuryAddress?: string;
     amount?: number;
     error?: string;
+    timeRemaining?: number;
   }>({ status: 'idle' });
   const [txHash, setTxHash] = useState('');
 
@@ -71,15 +71,24 @@ export default function Scan() {
     }
   }, [walletAddress]);
 
+  // Get target URL/repo based on scan type
+  const getTargetUrl = () => {
+    if (scanType === 'github-connected' && selectedRepo) {
+      return `https://github.com/${selectedRepo}`;
+    }
+    return githubUrl;
+  };
+
   // Create payment for paid tier
   const createPayment = async () => {
-    if (!githubUrl.trim() || !walletAddress) return;
+    const targetUrl = getTargetUrl();
+    if (!targetUrl || !walletAddress) return;
 
     try {
       const response = await fetch('/api/payments/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress, repoUrl: githubUrl }),
+        body: JSON.stringify({ walletAddress, repoUrl: targetUrl }),
       });
       const data = await response.json();
 
@@ -93,6 +102,7 @@ export default function Scan() {
         paymentId: data.paymentId,
         treasuryAddress: data.treasuryAddress,
         amount: data.amount,
+        timeRemaining: data.expiresIn,
       });
     } catch (err) {
       setPaymentState({ status: 'error', error: 'Failed to create payment' });
@@ -114,13 +124,32 @@ export default function Scan() {
       const data = await response.json();
 
       if (data.error) {
-        setPaymentState(prev => ({ ...prev, status: 'error', error: data.error }));
+        setPaymentState(prev => ({
+          ...prev,
+          status: 'awaiting_payment',
+          error: data.message || data.error
+        }));
         return;
       }
 
-      setPaymentState(prev => ({ ...prev, status: 'confirmed' }));
+      setPaymentState(prev => ({ ...prev, status: 'confirmed', error: undefined }));
     } catch (err) {
-      setPaymentState(prev => ({ ...prev, status: 'error', error: 'Failed to confirm payment' }));
+      setPaymentState(prev => ({ ...prev, status: 'awaiting_payment', error: 'Verification failed' }));
+    }
+  };
+
+  // Report canceled transaction
+  const reportCanceled = async () => {
+    if (!paymentState.paymentId) return;
+
+    try {
+      await fetch(`/api/payments/${paymentState.paymentId}/canceled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'user_rejected' }),
+      });
+    } catch (err) {
+      // Silent fail - this is just analytics
     }
   };
 
@@ -152,20 +181,24 @@ export default function Scan() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Handle different tiers
+    const targetUrl = getTargetUrl();
+
+    // Free tier
     if (scanTier === 'free') {
-      // Free rules-only scan
-      if (!githubUrl.trim()) return;
+      if (scanType === 'upload' && selectedFile) {
+        await scanUpload(selectedFile, model, 'anthropic');
+        return;
+      }
+      if (!targetUrl) return;
 
       try {
         const response = await fetch('/api/scans/free', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: githubUrl }),
+          body: JSON.stringify({ url: targetUrl }),
         });
         const data = await response.json();
         if (data.id) {
-          // Use the same status tracking
           navigate(`/report/${data.id}`);
         }
       } catch (err) {
@@ -174,15 +207,15 @@ export default function Scan() {
       return;
     }
 
+    // Trial tier
     if (scanTier === 'trial') {
-      // Trial AI scan (requires wallet)
-      if (!githubUrl.trim() || !walletAddress) return;
+      if (!targetUrl || !walletAddress) return;
 
       try {
         const response = await fetch('/api/scans/trial', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: githubUrl, walletAddress, model }),
+          body: JSON.stringify({ url: targetUrl, walletAddress, model }),
         });
         const data = await response.json();
         if (data.error) {
@@ -196,18 +229,6 @@ export default function Scan() {
         console.error('Trial scan error:', err);
       }
       return;
-    }
-
-    // Original behavior for connected repos
-    if (scanType === 'github-connected') {
-      if (!selectedRepo || !sessionId) return;
-      await scanRepo(sessionId, selectedRepo, model, provider);
-    } else if (scanType === 'github-url') {
-      if (!githubUrl.trim()) return;
-      await scanGitHub(githubUrl, model, provider);
-    } else {
-      if (!selectedFile) return;
-      await scanUpload(selectedFile, model, provider);
     }
   };
 
@@ -238,59 +259,60 @@ export default function Scan() {
     setGithubUrl('');
     setSelectedFile(null);
     setSelectedRepo('');
+    setPaymentState({ status: 'idle' });
+    setTxHash('');
   };
 
   // Filter repos by search
   const filteredRepos = repos.filter(repo =>
-    repo.full_name.toLowerCase().includes(repoSearch.toLowerCase()) ||
-    (repo.description?.toLowerCase().includes(repoSearch.toLowerCase()))
+    repo.full_name.toLowerCase().includes(repoSearch.toLowerCase())
   );
+
+  // Check if can submit
+  const canSubmit = () => {
+    if (loading) return false;
+    if (scanType === 'github-connected' && !selectedRepo) return false;
+    if (scanType === 'github-url' && !githubUrl.trim()) return false;
+    if (scanType === 'upload' && !selectedFile) return false;
+    if (scanTier === 'trial' && (!walletAddress || trialStatus.hasUsedTrial)) return false;
+    if (scanTier === 'paid') return false; // Paid uses separate flow
+    return true;
+  };
 
   // Show status while scanning
   if (status) {
     return (
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Security Scan</h1>
-        <p className="text-gray-400 mb-8">Scanning your code for vulnerabilities</p>
-
-        <div className="bg-gray-800 rounded-lg p-8 max-w-2xl">
+      <div className="max-w-xl mx-auto">
+        <div className="bg-gray-800 rounded-lg p-8">
           <div className="text-center">
             {status.status === 'pending' && (
               <>
-                <div className="text-6xl mb-4">⏳</div>
-                <h2 className="text-xl font-semibold">Initializing Scan</h2>
+                <div className="text-5xl mb-4">⏳</div>
+                <h2 className="text-xl font-semibold">Initializing</h2>
                 <p className="text-gray-400 mt-2">{status.message || 'Preparing...'}</p>
               </>
             )}
 
             {status.status === 'running' && (
               <>
-                <div className="text-6xl mb-4 animate-pulse">🔍</div>
-                <h2 className="text-xl font-semibold">Scanning in Progress</h2>
-                <p className="text-gray-400 mt-2">{status.message || 'Analyzing code...'}</p>
+                <div className="text-5xl mb-4 animate-pulse">🔍</div>
+                <h2 className="text-xl font-semibold">Scanning</h2>
+                <p className="text-gray-400 mt-2">{status.message || 'Analyzing...'}</p>
                 <div className="mt-4 bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div className="bg-arc-purple h-full animate-pulse" style={{ width: '60%' }} />
                 </div>
-                <p className="text-sm text-gray-500 mt-4">This may take 30-60 seconds</p>
               </>
             )}
 
             {status.status === 'completed' && (
               <>
-                <div className="text-6xl mb-4">✅</div>
-                <h2 className="text-xl font-semibold text-green-400">Scan Complete!</h2>
-                <p className="text-gray-400 mt-2">Your security report is ready</p>
-                <div className="mt-6 flex gap-4 justify-center">
-                  <button
-                    onClick={handleViewReport}
-                    className="bg-arc-purple hover:bg-arc-purple/80 text-white px-6 py-2 rounded-lg transition-colors"
-                  >
+                <div className="text-5xl mb-4">✅</div>
+                <h2 className="text-xl font-semibold text-green-400">Complete</h2>
+                <div className="mt-6 flex gap-3 justify-center">
+                  <button onClick={handleViewReport} className="bg-arc-purple hover:bg-arc-purple/80 text-white px-6 py-2 rounded-lg">
                     View Report
                   </button>
-                  <button
-                    onClick={handleNewScan}
-                    className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors"
-                  >
+                  <button onClick={handleNewScan} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg">
                     New Scan
                   </button>
                 </div>
@@ -299,13 +321,10 @@ export default function Scan() {
 
             {status.status === 'failed' && (
               <>
-                <div className="text-6xl mb-4">❌</div>
-                <h2 className="text-xl font-semibold text-red-400">Scan Failed</h2>
-                <p className="text-gray-400 mt-2">{status.message || 'An error occurred'}</p>
-                <button
-                  onClick={handleNewScan}
-                  className="mt-6 bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors"
-                >
+                <div className="text-5xl mb-4">❌</div>
+                <h2 className="text-xl font-semibold text-red-400">Failed</h2>
+                <p className="text-gray-400 mt-2">{status.message}</p>
+                <button onClick={handleNewScan} className="mt-6 bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg">
                   Try Again
                 </button>
               </>
@@ -317,583 +336,309 @@ export default function Scan() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-2">New Security Scan</h1>
-      <p className="text-gray-400 mb-8">Scan any codebase for security vulnerabilities</p>
+    <div className="max-w-xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">New Scan</h1>
 
-      <div className="bg-gray-800 rounded-lg p-6 max-w-2xl">
+      <div className="bg-gray-800 rounded-lg p-5">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4 text-red-400">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4 text-red-400 text-sm">
             {error}
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        {/* Source Tabs */}
+        <div className="flex gap-2 mb-5">
           <button
             type="button"
             onClick={() => setScanType('github-connected')}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
-              scanType === 'github-connected'
-                ? 'bg-arc-purple text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+              scanType === 'github-connected' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <span className="mr-2">🔗</span>
-            My Repos
+            🔗 My Repos
           </button>
           <button
             type="button"
             onClick={() => setScanType('github-url')}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
-              scanType === 'github-url'
-                ? 'bg-arc-purple text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+              scanType === 'github-url' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <span className="mr-2">🔓</span>
-            Public Repo
+            🌐 Public URL
           </button>
           <button
             type="button"
             onClick={() => setScanType('upload')}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
-              scanType === 'upload'
-                ? 'bg-arc-purple text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+              scanType === 'upload' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <span className="mr-2">📁</span>
-            Upload
+            📁 Upload
           </button>
         </div>
 
-        {/* Scan Tier Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-3">
-            Select Scan Type
-          </label>
-          <div className="grid grid-cols-3 gap-3">
-            {/* Free Tier */}
-            <button
-              type="button"
-              onClick={() => setScanTier('free')}
-              className={`p-4 rounded-lg border-2 text-left transition-all ${
-                scanTier === 'free'
-                  ? 'border-green-500 bg-green-500/10'
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-lg font-bold text-green-400">FREE</span>
-                <span className="text-2xl">🆓</span>
+        {/* My Repos - GitHub Connected */}
+        {scanType === 'github-connected' && (
+          <div className="mb-5">
+            {!isLoggedIn ? (
+              <div className="text-center py-6">
+                <button
+                  type="button"
+                  onClick={login}
+                  disabled={authLoading}
+                  className="bg-gray-900 hover:bg-black border border-gray-600 text-white px-5 py-2 rounded-lg inline-flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                  {authLoading ? 'Connecting...' : 'Connect GitHub'}
+                </button>
               </div>
-              <p className="text-sm text-gray-400">Rule-based scan</p>
-              <p className="text-xs text-gray-500 mt-1">91 security rules</p>
-            </button>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3 p-2 bg-gray-700/50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <img src={user?.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+                    <span className="text-sm">@{user?.login}</span>
+                  </div>
+                  <button type="button" onClick={logout} className="text-xs text-gray-400 hover:text-white">
+                    Disconnect
+                  </button>
+                </div>
 
-            {/* Trial Tier */}
-            <button
-              type="button"
-              onClick={() => setScanTier('trial')}
-              disabled={trialStatus.hasUsedTrial}
-              className={`p-4 rounded-lg border-2 text-left transition-all ${
-                scanTier === 'trial'
-                  ? 'border-arc-purple bg-arc-purple/10'
-                  : trialStatus.hasUsedTrial
-                  ? 'border-gray-700 bg-gray-800 opacity-50 cursor-not-allowed'
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-lg font-bold text-arc-purple">TRIAL</span>
-                <span className="text-2xl">🎁</span>
-              </div>
-              <p className="text-sm text-gray-400">Full AI scan</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {trialStatus.hasUsedTrial ? 'Already used' : '1 free per wallet'}
-              </p>
-            </button>
+                <input
+                  type="text"
+                  value={repoSearch}
+                  onChange={(e) => setRepoSearch(e.target.value)}
+                  placeholder="Search repos..."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white mb-2"
+                />
 
-            {/* Paid Tier */}
-            <button
-              type="button"
-              onClick={() => setScanTier('paid')}
-              className={`p-4 rounded-lg border-2 text-left transition-all ${
-                scanTier === 'paid'
-                  ? 'border-yellow-500 bg-yellow-500/10'
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-lg font-bold text-yellow-400">$0.10</span>
-                <span className="text-2xl">💰</span>
-              </div>
-              <p className="text-sm text-gray-400">Pay per scan</p>
-              <p className="text-xs text-gray-500 mt-1">USDC on Arc</p>
-            </button>
+                <div className="max-h-48 overflow-y-auto border border-gray-600 rounded-lg">
+                  {reposLoading ? (
+                    <div className="p-3 text-center text-gray-400 text-sm">Loading...</div>
+                  ) : filteredRepos.length === 0 ? (
+                    <div className="p-3 text-center text-gray-400 text-sm">No repos found</div>
+                  ) : (
+                    filteredRepos.slice(0, 20).map(repo => (
+                      <button
+                        key={repo.id}
+                        type="button"
+                        onClick={() => setSelectedRepo(repo.full_name)}
+                        className={`w-full text-left p-2 text-sm border-b border-gray-700 last:border-0 ${
+                          selectedRepo === repo.full_name ? 'bg-arc-purple/20' : 'hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <span>{repo.private ? '🔒' : '📂'} {repo.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {selectedRepo && (
+                  <p className="text-xs text-green-400 mt-2">Selected: {selectedRepo}</p>
+                )}
+              </>
+            )}
           </div>
+        )}
+
+        {/* Public URL */}
+        {scanType === 'github-url' && (
+          <div className="mb-5">
+            <input
+              type="text"
+              value={githubUrl}
+              onChange={(e) => setGithubUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo"
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400"
+            />
+          </div>
+        )}
+
+        {/* File Upload */}
+        {scanType === 'upload' && (
+          <div className="mb-5">
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer ${
+                isDragging ? 'border-arc-purple bg-arc-purple/10' :
+                selectedFile ? 'border-green-500 bg-green-500/10' : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                }}
+              />
+              {selectedFile ? (
+                <>
+                  <p className="font-medium text-green-400">📦 {selectedFile.name}</p>
+                  <p className="text-xs text-gray-400 mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                    className="text-xs text-red-400 mt-2"
+                  >
+                    Remove
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-300">📤 Drop ZIP file here</p>
+                  <p className="text-xs text-gray-500 mt-1">or click to browse</p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Scan Tier */}
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <button
+            type="button"
+            onClick={() => setScanTier('free')}
+            className={`p-3 rounded-lg border-2 text-center ${
+              scanTier === 'free' ? 'border-green-500 bg-green-500/10' : 'border-gray-600 hover:border-gray-500'
+            }`}
+          >
+            <div className="text-green-400 font-bold">FREE</div>
+            <div className="text-xs text-gray-400">91 rules</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setScanTier('trial')}
+            disabled={trialStatus.hasUsedTrial}
+            className={`p-3 rounded-lg border-2 text-center ${
+              scanTier === 'trial' ? 'border-arc-purple bg-arc-purple/10' :
+              trialStatus.hasUsedTrial ? 'border-gray-700 opacity-50' : 'border-gray-600 hover:border-gray-500'
+            }`}
+          >
+            <div className="text-arc-purple font-bold">TRIAL</div>
+            <div className="text-xs text-gray-400">{trialStatus.hasUsedTrial ? 'Used' : 'AI scan'}</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setScanTier('paid')}
+            className={`p-3 rounded-lg border-2 text-center ${
+              scanTier === 'paid' ? 'border-yellow-500 bg-yellow-500/10' : 'border-gray-600 hover:border-gray-500'
+            }`}
+          >
+            <div className="text-yellow-400 font-bold">$0.15</div>
+            <div className="text-xs text-gray-400">USDC</div>
+          </button>
         </div>
 
-        {/* Wallet Address Input for Trial or Paid */}
+        {/* Wallet Input for Trial/Paid */}
         {(scanTier === 'trial' || scanTier === 'paid') && (
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Wallet Address {scanTier === 'trial' ? '(for trial tracking)' : '(for payment)'}
-            </label>
+          <div className="mb-5">
             <input
               type="text"
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
-              placeholder="0x..."
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
+              placeholder="Wallet address (0x...)"
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400"
             />
-            {scanTier === 'trial' && trialStatus.loading && (
-              <p className="text-xs text-gray-500 mt-1">Checking trial status...</p>
-            )}
             {scanTier === 'trial' && walletAddress && !trialStatus.loading && (
               <p className={`text-xs mt-1 ${trialStatus.hasUsedTrial ? 'text-red-400' : 'text-green-400'}`}>
-                {trialStatus.hasUsedTrial
-                  ? 'This wallet has already used its free trial'
-                  : 'Free trial available for this wallet!'}
+                {trialStatus.hasUsedTrial ? 'Trial already used' : 'Trial available'}
               </p>
             )}
           </div>
         )}
 
-        {/* Payment Flow for Paid Tier */}
+        {/* Payment Flow */}
         {scanTier === 'paid' && (
-          <div className="mb-6 bg-gray-700/50 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Payment Flow</h3>
-
+          <div className="mb-5">
             {paymentState.status === 'idle' && (
-              <div className="text-sm text-gray-400">
-                <p>1. Enter GitHub URL and wallet address above</p>
-                <p>2. Click "Create Payment" to get payment details</p>
-                <p>3. Send USDC and confirm with transaction hash</p>
-              </div>
+              <button
+                type="button"
+                onClick={createPayment}
+                disabled={!getTargetUrl() || !walletAddress}
+                className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 text-black font-medium py-3 rounded-lg"
+              >
+                Create Payment
+              </button>
             )}
 
-            {(paymentState.status === 'awaiting_payment' || paymentState.status === 'confirming') && paymentState.paymentId && (
+            {(paymentState.status === 'awaiting_payment' || paymentState.status === 'confirming') && (
               <div className="space-y-3">
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                  <p className="text-yellow-400 font-medium mb-2">Payment Required</p>
-                  <div className="text-sm text-gray-300 space-y-1">
-                    <p><span className="text-gray-500">Amount:</span> {paymentState.amount} USDC</p>
-                    <p><span className="text-gray-500">Send to:</span></p>
-                    <p className="font-mono text-xs bg-gray-800 p-2 rounded break-all">{paymentState.treasuryAddress}</p>
-                    <p><span className="text-gray-500">Payment ID:</span></p>
-                    <p className="font-mono text-xs bg-gray-800 p-2 rounded">{paymentState.paymentId}</p>
+                <div className="bg-gray-700 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-400">Amount</span>
+                    <span>{paymentState.amount} USDC</span>
+                  </div>
+                  <div className="mb-2">
+                    <span className="text-gray-400 text-xs">Send to:</span>
+                    <p className="font-mono text-xs bg-gray-800 p-2 rounded mt-1 break-all">{paymentState.treasuryAddress}</p>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Transaction Hash (after sending USDC)
-                  </label>
-                  <input
-                    type="text"
-                    value={txHash}
-                    onChange={(e) => setTxHash(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
-                  />
-                </div>
+                {paymentState.error && (
+                  <p className="text-red-400 text-sm">{paymentState.error}</p>
+                )}
 
-                <button
-                  type="button"
-                  onClick={confirmPayment}
-                  disabled={!txHash || paymentState.status === 'confirming'}
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-medium py-2 rounded-lg transition-colors"
-                >
-                  {paymentState.status === 'confirming' ? 'Confirming...' : 'Confirm Payment'}
-                </button>
+                <input
+                  type="text"
+                  value={txHash}
+                  onChange={(e) => setTxHash(e.target.value)}
+                  placeholder="Transaction hash (0x...)"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={confirmPayment}
+                    disabled={!txHash || paymentState.status === 'confirming'}
+                    className="flex-1 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 text-black font-medium py-2 rounded-lg"
+                  >
+                    {paymentState.status === 'confirming' ? 'Verifying...' : 'Verify'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { reportCanceled(); setPaymentState({ status: 'idle' }); setTxHash(''); }}
+                    className="px-4 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
 
             {paymentState.status === 'confirmed' && (
-              <div className="space-y-3">
-                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-                  <p className="text-green-400 font-medium">Payment Confirmed!</p>
-                  <p className="text-sm text-gray-400 mt-1">You can now start your AI scan.</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={startPaidScan}
-                  className="w-full bg-arc-purple hover:bg-arc-purple/80 text-white font-medium py-3 rounded-lg transition-colors"
-                >
-                  Start AI Scan
-                </button>
-              </div>
-            )}
-
-            {paymentState.status === 'error' && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <p className="text-red-400">{paymentState.error}</p>
-                <button
-                  type="button"
-                  onClick={() => setPaymentState({ status: 'idle' })}
-                  className="text-sm text-gray-400 hover:text-white mt-2"
-                >
-                  Try again
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={startPaidScan}
+                className="w-full bg-arc-purple hover:bg-arc-purple/80 text-white font-medium py-3 rounded-lg"
+              >
+                Start Scan
+              </button>
             )}
           </div>
         )}
 
-        {/* GitHub URL for all tiers */}
-        <div className="mb-6">
-          <label htmlFor="github-url" className="block text-sm font-medium text-gray-300 mb-2">
-            GitHub Repository URL
-          </label>
-          <input
-            type="text"
-            id="github-url"
-            value={githubUrl}
-            onChange={(e) => setGithubUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo"
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            {scanTier === 'free'
-              ? 'Free scan uses 91 security rules (no AI)'
-              : scanTier === 'trial'
-              ? 'Trial uses full AI-powered analysis'
-              : 'Paid scan uses full AI-powered analysis ($0.10 USDC)'}
-          </p>
-        </div>
-
-        {/* Features List for selected tier */}
-        <div className="bg-gray-700/50 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-gray-300 mb-2">
-            {scanTier === 'free' ? 'Free Scan includes:' : 'AI Scan includes:'}
-          </h3>
-          <ul className="text-sm text-gray-400 space-y-1">
-            {scanTier === 'free' ? (
-              <>
-                <li>✓ 91 built-in security rules</li>
-                <li>✓ 20 Arc-specific checks</li>
-                <li>✓ Pattern-based vulnerability detection</li>
-                <li>✓ Smart contract analysis</li>
-                <li className="text-gray-500">✗ No AI-powered analysis</li>
-                <li className="text-gray-500">✗ No STRIDE threat modeling</li>
-              </>
-            ) : (
-              <>
-                <li>✓ Everything in Free tier</li>
-                <li>✓ Architecture assessment</li>
-                <li>✓ STRIDE threat modeling</li>
-                <li>✓ AI-powered code review</li>
-                <li>✓ Detailed remediation steps</li>
-              </>
-            )}
-          </ul>
-        </div>
-
-        {/* Submit Button */}
+        {/* Submit Button for Free/Trial */}
         {scanTier !== 'paid' && (
           <button
             type="button"
             onClick={handleSubmit as any}
-            disabled={
-              loading ||
-              (scanTier === 'trial' && (!walletAddress || trialStatus.hasUsedTrial)) ||
-              !githubUrl.trim()
-            }
-            className="w-full bg-arc-purple hover:bg-arc-purple/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition-colors mb-4"
+            disabled={!canSubmit()}
+            className="w-full bg-arc-purple hover:bg-arc-purple/80 disabled:bg-gray-600 text-white py-3 rounded-lg font-medium"
           >
-            {loading
-              ? 'Starting Scan...'
-              : scanTier === 'free'
-              ? 'Start Free Scan'
-              : 'Use Free Trial'}
+            {loading ? 'Starting...' : scanTier === 'free' ? 'Start Free Scan' : 'Start Trial'}
           </button>
         )}
-
-        {/* Create Payment Button for Paid Tier */}
-        {scanTier === 'paid' && paymentState.status === 'idle' && (
-          <button
-            type="button"
-            onClick={createPayment}
-            disabled={!githubUrl.trim() || !walletAddress}
-            className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black py-3 rounded-lg font-medium transition-colors mb-4"
-          >
-            Create Payment ($0.10 USDC)
-          </button>
-        )}
-
-        {/* Divider for advanced options */}
-        <div className="border-t border-gray-700 pt-4 mt-4">
-          <details className="text-gray-400">
-            <summary className="cursor-pointer text-sm hover:text-white">Advanced options (Connected repos, upload)</summary>
-
-        <form onSubmit={handleSubmit} className="mt-4">
-          {/* GitHub Connected Repos */}
-          {scanType === 'github-connected' && (
-            <div className="mb-6">
-              {!isLoggedIn ? (
-                <div className="text-center py-8">
-                  <span className="text-5xl mb-4 block">🔐</span>
-                  <h3 className="text-lg font-semibold mb-2">Connect Your GitHub</h3>
-                  <p className="text-gray-400 mb-4">
-                    Connect your GitHub account to scan your public and private repositories
-                  </p>
-                  <button
-                    type="button"
-                    onClick={login}
-                    disabled={authLoading}
-                    className="bg-gray-900 hover:bg-gray-950 border border-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors inline-flex items-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                    </svg>
-                    {authLoading ? 'Connecting...' : 'Connect with GitHub'}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* User info */}
-                  <div className="flex items-center justify-between mb-4 p-3 bg-gray-700/50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={user?.avatar_url}
-                        alt={user?.login}
-                        className="w-10 h-10 rounded-full"
-                      />
-                      <div>
-                        <p className="font-medium">{user?.name || user?.login}</p>
-                        <p className="text-sm text-gray-400">@{user?.login}</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={logout}
-                      className="text-sm text-gray-400 hover:text-white"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-
-                  {/* Repo selector */}
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Select Repository
-                  </label>
-
-                  {/* Search */}
-                  <input
-                    type="text"
-                    value={repoSearch}
-                    onChange={(e) => setRepoSearch(e.target.value)}
-                    placeholder="Search repositories..."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple mb-2"
-                  />
-
-                  {/* Repo list */}
-                  <div className="max-h-64 overflow-y-auto border border-gray-600 rounded-lg">
-                    {reposLoading ? (
-                      <div className="p-4 text-center text-gray-400">Loading repositories...</div>
-                    ) : filteredRepos.length === 0 ? (
-                      <div className="p-4 text-center text-gray-400">No repositories found</div>
-                    ) : (
-                      filteredRepos.map(repo => (
-                        <button
-                          key={repo.id}
-                          type="button"
-                          onClick={() => setSelectedRepo(repo.full_name)}
-                          className={`w-full text-left p-3 border-b border-gray-700 last:border-0 transition-colors ${
-                            selectedRepo === repo.full_name
-                              ? 'bg-arc-purple/20'
-                              : 'hover:bg-gray-700/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span>{repo.private ? '🔒' : '📂'}</span>
-                              <span className="font-medium">{repo.name}</span>
-                            </div>
-                            {repo.language && (
-                              <span className="text-xs bg-gray-600 px-2 py-0.5 rounded">
-                                {repo.language}
-                              </span>
-                            )}
-                          </div>
-                          {repo.description && (
-                            <p className="text-sm text-gray-400 mt-1 truncate">{repo.description}</p>
-                          )}
-                        </button>
-                      ))
-                    )}
-                  </div>
-
-                  {selectedRepo && (
-                    <p className="text-sm text-green-400 mt-2">
-                      Selected: {selectedRepo}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* GitHub URL Input */}
-          {scanType === 'github-url' && (
-            <div className="mb-6">
-              <label htmlFor="github-url" className="block text-sm font-medium text-gray-300 mb-2">
-                GitHub Repository URL
-              </label>
-              <input
-                type="text"
-                id="github-url"
-                value={githubUrl}
-                onChange={(e) => setGithubUrl(e.target.value)}
-                placeholder="https://github.com/owner/repo"
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
-                required={scanType === 'github-url'}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Scan any public GitHub repo without signing in (e.g. github.com/owner/repo)
-              </p>
-            </div>
-          )}
-
-          {/* File Upload */}
-          {scanType === 'upload' && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Upload ZIP File
-              </label>
-              <div
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragging
-                    ? 'border-arc-purple bg-arc-purple/10'
-                    : selectedFile
-                    ? 'border-green-500 bg-green-500/10'
-                    : 'border-gray-600 hover:border-gray-500'
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileSelect(file);
-                  }}
-                />
-                {selectedFile ? (
-                  <>
-                    <span className="text-4xl">📦</span>
-                    <p className="mt-2 font-medium text-green-400">{selectedFile.name}</p>
-                    <p className="text-sm text-gray-400">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
-                      className="mt-2 text-sm text-red-400 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-4xl">📤</span>
-                    <p className="mt-2 text-gray-300">Drag & drop your ZIP file here</p>
-                    <p className="text-sm text-gray-500">or click to browse</p>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                ZIP your project folder and upload it (max 50MB)
-              </p>
-            </div>
-          )}
-
-          {/* Model Selection - Only show when input is provided */}
-          {(scanType !== 'github-connected' || isLoggedIn) && (
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <label htmlFor="provider" className="block text-sm font-medium text-gray-300 mb-2">
-                  AI Provider
-                </label>
-                <select
-                  id="provider"
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-arc-purple"
-                >
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="ollama">Ollama (Local)</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="model" className="block text-sm font-medium text-gray-300 mb-2">
-                  Model
-                </label>
-                <select
-                  id="model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-arc-purple"
-                >
-                  {provider === 'anthropic' ? (
-                    <>
-                      <option value="haiku">Haiku (Fast & Cheap)</option>
-                      <option value="sonnet">Sonnet (Balanced)</option>
-                      <option value="opus">Opus (Most Capable)</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="llama3">Llama 3</option>
-                      <option value="mistral">Mistral</option>
-                      <option value="codellama">CodeLlama</option>
-                    </>
-                  )}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Features List */}
-          {(scanType !== 'github-connected' || isLoggedIn) && (
-            <div className="bg-gray-700/50 rounded-lg p-4 mb-6">
-              <h3 className="text-sm font-medium text-gray-300 mb-2">Scan includes:</h3>
-              <ul className="text-sm text-gray-400 space-y-1">
-                <li>✓ Architecture assessment</li>
-                <li>✓ STRIDE threat modeling</li>
-                <li>✓ Vulnerability code review</li>
-                <li>✓ Arc-specific security checks</li>
-                <li>✓ Smart contract analysis (Solidity)</li>
-              </ul>
-            </div>
-          )}
-
-          {/* Submit Button */}
-          {(scanType !== 'github-connected' || isLoggedIn) && (
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                (scanType === 'github-connected' && !selectedRepo) ||
-                (scanType === 'github-url' && !githubUrl.trim()) ||
-                (scanType === 'upload' && !selectedFile)
-              }
-              className="w-full bg-arc-purple hover:bg-arc-purple/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition-colors"
-            >
-              {loading ? 'Starting Scan...' : 'Start Security Scan'}
-            </button>
-          )}
-        </form>
-        </details>
-        </div>
       </div>
     </div>
   );
