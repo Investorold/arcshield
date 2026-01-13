@@ -23,6 +23,12 @@ import {
   generateScoreBadge,
   generateStatusBadge,
 } from './badge.js';
+import {
+  verifyTransactionOnChain,
+  isValidTxHash,
+  getExplorerUrl,
+  checkArcConnection,
+} from './arc-blockchain.js';
 
 const app = express();
 const PORT = process.env.PORT || 3501;
@@ -34,6 +40,132 @@ const sessions: Map<string, {
   user: GitHubUser;
   repos?: GitHubRepo[];
 }> = new Map();
+
+// ============================================
+// WALLET TRIAL TRACKING
+// ============================================
+
+// Track which wallets have used their ONE free AI trial
+// In production, use a database (PostgreSQL, Redis, etc.)
+const walletTrials: Map<string, {
+  usedTrial: boolean;
+  trialScanId?: string;
+  trialUsedAt?: string;
+}> = new Map();
+
+// File path for persisting wallet trials (simple file-based persistence)
+const WALLET_TRIALS_FILE = path.join(process.env.HOME || '/root', '.arcshield', 'wallet-trials.json');
+
+// Load wallet trials from file on startup
+function loadWalletTrials(): void {
+  try {
+    if (fs.existsSync(WALLET_TRIALS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(WALLET_TRIALS_FILE, 'utf-8'));
+      for (const [wallet, trial] of Object.entries(data)) {
+        walletTrials.set(wallet.toLowerCase(), trial as any);
+      }
+      console.log(`[Wallet Trials] Loaded ${walletTrials.size} wallet records`);
+    }
+  } catch (error) {
+    console.error('[Wallet Trials] Error loading:', error);
+  }
+}
+
+// Save wallet trials to file
+function saveWalletTrials(): void {
+  try {
+    const data: Record<string, any> = {};
+    walletTrials.forEach((trial, wallet) => {
+      data[wallet] = trial;
+    });
+    fs.writeFileSync(WALLET_TRIALS_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('[Wallet Trials] Error saving:', error);
+  }
+}
+
+// Check if wallet has used their free trial
+function hasUsedTrial(walletAddress: string): boolean {
+  const trial = walletTrials.get(walletAddress.toLowerCase());
+  return trial?.usedTrial === true;
+}
+
+// Mark wallet as having used their trial
+function markTrialUsed(walletAddress: string, scanId: string): void {
+  walletTrials.set(walletAddress.toLowerCase(), {
+    usedTrial: true,
+    trialScanId: scanId,
+    trialUsedAt: new Date().toISOString(),
+  });
+  saveWalletTrials();
+  console.log(`[Wallet Trials] Trial used by ${walletAddress.slice(0, 10)}...`);
+}
+
+// Load trials on startup
+loadWalletTrials();
+
+// ============================================
+// GITHUB ACCOUNT TRIAL TRACKING
+// ============================================
+
+// Track which GitHub accounts have used their ONE free AI trial
+const githubTrials: Map<string, {
+  usedTrial: boolean;
+  trialScanId?: string;
+  trialUsedAt?: string;
+  username?: string;
+}> = new Map();
+
+const GITHUB_TRIALS_FILE = path.join(process.env.HOME || '/root', '.arcshield', 'github-trials.json');
+
+// Load GitHub trials from file
+function loadGitHubTrials(): void {
+  try {
+    if (fs.existsSync(GITHUB_TRIALS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(GITHUB_TRIALS_FILE, 'utf-8'));
+      for (const [id, trial] of Object.entries(data)) {
+        githubTrials.set(id, trial as any);
+      }
+      console.log(`[GitHub Trials] Loaded ${githubTrials.size} account records`);
+    }
+  } catch (error) {
+    console.error('[GitHub Trials] Error loading:', error);
+  }
+}
+
+// Save GitHub trials to file
+function saveGitHubTrials(): void {
+  try {
+    const data: Record<string, any> = {};
+    githubTrials.forEach((trial, id) => {
+      data[id] = trial;
+    });
+    fs.writeFileSync(GITHUB_TRIALS_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('[GitHub Trials] Error saving:', error);
+  }
+}
+
+// Check if GitHub account has used their free trial
+function hasGitHubUsedTrial(githubId: string): boolean {
+  const trial = githubTrials.get(githubId);
+  return trial?.usedTrial === true;
+}
+
+// Mark GitHub account as having used their trial
+function markGitHubTrialUsed(githubId: string, username: string, scanId: string): void {
+  githubTrials.set(githubId, {
+    usedTrial: true,
+    trialScanId: scanId,
+    trialUsedAt: new Date().toISOString(),
+    username,
+  });
+  saveGitHubTrials();
+  console.log(`[GitHub Trials] Trial used by @${username} (ID: ${githubId})`);
+}
+
+// Load GitHub trials on startup
+loadGitHubTrials();
 
 // ============================================
 // RATE LIMITING & SPENDING CONTROLS
@@ -522,6 +654,876 @@ app.delete('/api/scans/:id', (req, res) => {
 });
 
 // ==========================================
+// PRICING TIERS & WALLET TRIAL ENDPOINTS
+// ==========================================
+
+/**
+ * GET /api/wallet/:address/trial - Check if wallet has used their free AI trial
+ */
+app.get('/api/wallet/:address/trial', (req, res) => {
+  const { address } = req.params;
+
+  if (!address || address.length < 10) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const trial = walletTrials.get(address.toLowerCase());
+
+  res.json({
+    walletAddress: address.toLowerCase(),
+    hasUsedTrial: trial?.usedTrial === true,
+    trialScanId: trial?.trialScanId || null,
+    trialUsedAt: trial?.trialUsedAt || null,
+  });
+});
+
+/**
+ * POST /api/scans/free - Run FREE rules-only scan (no AI, no cost)
+ * Unlimited for all users
+ */
+app.post('/api/scans/free', async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'GitHub URL is required' });
+    }
+
+    // Validate GitHub URL
+    const parsed = parseGitHubUrl(url);
+    if (!parsed) {
+      return res.status(400).json({ error: 'Invalid GitHub URL' });
+    }
+
+    const scanId = `scan_${Date.now()}`;
+    const displayTarget = `github.com/${parsed.owner}/${parsed.repo}`;
+
+    scanStatus.set(scanId, {
+      status: 'pending',
+      message: 'Cloning repository...',
+      target: displayTarget,
+    });
+
+    res.json({ id: scanId, status: 'pending', target: displayTarget, scanType: 'rules-only' });
+
+    // Run FREE rules-only scan in background
+    runFreeRulesOnlyScan(scanId, url, displayTarget);
+  } catch (error) {
+    console.error('Error starting free scan:', error);
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
+
+/**
+ * GET /api/github/:sessionId/trial - Check if GitHub account has used their free trial
+ */
+app.get('/api/github/:sessionId/trial', (req, res) => {
+  const { sessionId } = req.params;
+
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const githubId = String(session.user.id);
+  const trial = githubTrials.get(githubId);
+
+  res.json({
+    githubId,
+    username: session.user.login,
+    hasUsedTrial: trial?.usedTrial === true,
+    trialScanId: trial?.trialScanId || null,
+    trialUsedAt: trial?.trialUsedAt || null,
+  });
+});
+
+/**
+ * POST /api/scans/repo/trial - Use ONE free AI trial for GitHub connected repo
+ */
+app.post('/api/scans/repo/trial', rateLimitMiddleware, async (req, res) => {
+  try {
+    const ip = getClientIP(req);
+    const { sessionId, repoFullName, model = 'haiku' } = req.body;
+
+    if (!sessionId || !repoFullName) {
+      return res.status(400).json({ error: 'Session ID and repo name are required' });
+    }
+
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const githubId = String(session.user.id);
+
+    // Check if GitHub account has already used trial
+    if (hasGitHubUsedTrial(githubId)) {
+      return res.status(403).json({
+        error: 'Free trial already used',
+        message: `GitHub account @${session.user.login} has already used its one free AI scan trial. Please use the FREE rules-only scan or pay for AI scans.`,
+      });
+    }
+
+    // Find the repo
+    if (!session.repos) {
+      session.repos = await getGitHubRepos(session.accessToken);
+    }
+
+    const repo = session.repos.find(r => r.full_name === repoFullName);
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    incrementRateLimit(ip);
+
+    const scanId = `scan_${Date.now()}`;
+    const displayTarget = `github.com/${repo.full_name}`;
+
+    // Mark GitHub trial as used BEFORE starting scan
+    markGitHubTrialUsed(githubId, session.user.login, scanId);
+
+    scanStatus.set(scanId, {
+      status: 'pending',
+      message: 'Cloning repository...',
+      target: displayTarget,
+    });
+
+    res.json({
+      id: scanId,
+      status: 'pending',
+      target: displayTarget,
+      scanType: 'ai-full',
+      trialUsed: true,
+      githubUsername: session.user.login,
+    });
+
+    // Run full AI scan in background
+    runAuthenticatedGitHubScan(scanId, repo, session.accessToken, displayTarget, model, 'anthropic');
+  } catch (error) {
+    console.error('Error starting GitHub trial scan:', error);
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
+
+/**
+ * POST /api/scans/repo/free - Run FREE rules-only scan for GitHub connected repo
+ */
+app.post('/api/scans/repo/free', async (req, res) => {
+  try {
+    const { sessionId, repoFullName } = req.body;
+
+    if (!sessionId || !repoFullName) {
+      return res.status(400).json({ error: 'Session ID and repo name are required' });
+    }
+
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    // Find the repo
+    if (!session.repos) {
+      session.repos = await getGitHubRepos(session.accessToken);
+    }
+
+    const repo = session.repos.find(r => r.full_name === repoFullName);
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    const scanId = `scan_${Date.now()}`;
+    const displayTarget = `github.com/${repo.full_name}`;
+
+    scanStatus.set(scanId, {
+      status: 'pending',
+      message: 'Cloning repository...',
+      target: displayTarget,
+    });
+
+    res.json({
+      id: scanId,
+      status: 'pending',
+      target: displayTarget,
+      scanType: 'rules-only',
+    });
+
+    // Run FREE rules-only scan in background
+    runAuthenticatedFreeRulesOnlyScan(scanId, repo, session.accessToken, displayTarget);
+  } catch (error) {
+    console.error('Error starting free repo scan:', error);
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
+
+/**
+ * POST /api/scans/trial - Use ONE free AI trial (per wallet - for public repos)
+ */
+app.post('/api/scans/trial', rateLimitMiddleware, async (req, res) => {
+  try {
+    const ip = getClientIP(req);
+    const { url, walletAddress, model = 'haiku' } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'GitHub URL is required' });
+    }
+
+    if (!walletAddress || walletAddress.length < 10) {
+      return res.status(400).json({ error: 'Valid wallet address is required for trial' });
+    }
+
+    // Check if wallet has already used trial
+    if (hasUsedTrial(walletAddress)) {
+      return res.status(403).json({
+        error: 'Free trial already used',
+        message: 'This wallet has already used its one free AI scan trial. Please use the FREE rules-only scan or pay for AI scans.',
+      });
+    }
+
+    // Validate GitHub URL
+    const parsed = parseGitHubUrl(url);
+    if (!parsed) {
+      return res.status(400).json({ error: 'Invalid GitHub URL' });
+    }
+
+    incrementRateLimit(ip);
+
+    const scanId = `scan_${Date.now()}`;
+    const displayTarget = `github.com/${parsed.owner}/${parsed.repo}`;
+
+    // Mark trial as used BEFORE starting scan
+    markTrialUsed(walletAddress, scanId);
+
+    scanStatus.set(scanId, {
+      status: 'pending',
+      message: 'Cloning repository...',
+      target: displayTarget,
+    });
+
+    res.json({
+      id: scanId,
+      status: 'pending',
+      target: displayTarget,
+      scanType: 'ai-full',
+      trialUsed: true,
+    });
+
+    // Run full AI scan in background
+    runGitHubScan(scanId, url, displayTarget, model, 'anthropic');
+  } catch (error) {
+    console.error('Error starting trial scan:', error);
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
+
+/**
+ * Run FREE rules-only scan (no AI cost)
+ */
+async function runFreeRulesOnlyScan(
+  scanId: string,
+  url: string,
+  displayTarget: string
+) {
+  let cleanup: (() => void) | null = null;
+
+  try {
+    // Clone repository
+    scanStatus.set(scanId, { status: 'running', message: 'Cloning repository...', target: displayTarget });
+    const { path: repoPath, cleanup: repoCleanup } = await cloneGitHubRepo(url);
+    cleanup = repoCleanup;
+    cleanupFunctions.set(scanId, cleanup);
+
+    // Run rules-only scan
+    scanStatus.set(scanId, { status: 'running', message: 'Running security rules scan...', target: displayTarget });
+
+    const scanner = new Scanner({
+      target: repoPath,
+      model: 'haiku', // Not used for rules-only
+      provider: 'anthropic', // Not used for rules-only
+      outputFormat: 'json',
+      includeGenLayer: true,
+    });
+
+    // Use the scanRulesOnly method (FREE - no API calls)
+    const report = await scanner.scanRulesOnly();
+
+    // Save report
+    const filePath = path.join(SCANS_DIR, `${scanId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify({
+      ...report,
+      id: scanId,
+      target: displayTarget,
+      scanType: 'rules-only',
+      cost: 0,
+    }, null, 2));
+
+    scanStatus.set(scanId, { status: 'completed', message: 'Scan complete!', target: displayTarget });
+
+    // Cleanup
+    cleanup();
+    cleanupFunctions.delete(scanId);
+
+    setTimeout(() => scanStatus.delete(scanId), 5 * 60 * 1000);
+  } catch (error) {
+    console.error('Free scan failed:', error);
+    scanStatus.set(scanId, {
+      status: 'failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      target: displayTarget,
+    });
+
+    if (cleanup) {
+      cleanup();
+      cleanupFunctions.delete(scanId);
+    }
+  }
+}
+
+// ==========================================
+// USDC PAYMENT SYSTEM
+// ==========================================
+
+// Payment configuration
+const PAYMENT_CONFIG = {
+  treasuryAddress: process.env.TREASURY_ADDRESS || '0x68a4ca3aB8A642aa726166b25272507985B8827A', // USDC receiving address
+  scanPriceUSDC: parseFloat(process.env.SCAN_PRICE_USDC || '0.15'), // $0.15 per scan
+  arcRpcUrl: process.env.ARC_RPC_URL || 'https://rpc.arc.io', // Arc RPC endpoint
+  paymentExpiryMinutes: 30, // Payment must be completed within 30 minutes
+  // Note: No attempt limits - users can cancel and try again until expiry (industry standard)
+};
+
+// Track pending and completed payments
+interface PaymentRecord {
+  id: string;
+  walletAddress: string;
+  amount: number;
+  status: 'pending' | 'confirmed' | 'expired' | 'used';
+  createdAt: string;
+  confirmedAt?: string;
+  txHash?: string;
+  scanId?: string;
+  repoUrl?: string;
+  // Transaction history (for analytics/debugging - does NOT limit user)
+  transactionHistory?: {
+    txHash?: string; // May be undefined for canceled transactions
+    type: 'submitted' | 'canceled' | 'failed';
+    error?: string;
+    timestamp: string;
+    // Details for failed on-chain transactions
+    onChainStatus?: 'reverted' | 'not_found' | 'amount_mismatch' | 'wrong_recipient';
+  }[];
+}
+
+const payments: Map<string, PaymentRecord> = new Map();
+const PAYMENTS_FILE = path.join(process.env.HOME || '/root', '.arcshield', 'payments.json');
+
+// Load payments from file
+function loadPayments(): void {
+  try {
+    if (fs.existsSync(PAYMENTS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(PAYMENTS_FILE, 'utf-8'));
+      for (const [id, payment] of Object.entries(data)) {
+        payments.set(id, payment as PaymentRecord);
+      }
+      console.log(`[Payments] Loaded ${payments.size} payment records`);
+    }
+  } catch (error) {
+    console.error('[Payments] Error loading:', error);
+  }
+}
+
+// Save payments to file
+function savePayments(): void {
+  try {
+    const data: Record<string, PaymentRecord> = {};
+    payments.forEach((payment, id) => {
+      data[id] = payment;
+    });
+    fs.writeFileSync(PAYMENTS_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('[Payments] Error saving:', error);
+  }
+}
+
+// Generate unique payment ID
+function generatePaymentId(): string {
+  return `pay_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
+// Load payments on startup
+loadPayments();
+
+/**
+ * POST /api/payments/create - Create a new payment request
+ */
+app.post('/api/payments/create', (req, res) => {
+  try {
+    const { walletAddress, repoUrl } = req.body;
+
+    if (!walletAddress || walletAddress.length < 10) {
+      return res.status(400).json({ error: 'Valid wallet address is required' });
+    }
+
+    if (!repoUrl) {
+      return res.status(400).json({ error: 'Repository URL is required' });
+    }
+
+    const paymentId = generatePaymentId();
+    const payment: PaymentRecord = {
+      id: paymentId,
+      walletAddress: walletAddress.toLowerCase(),
+      amount: PAYMENT_CONFIG.scanPriceUSDC,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      repoUrl,
+    };
+
+    payments.set(paymentId, payment);
+    savePayments();
+
+    res.json({
+      paymentId,
+      amount: PAYMENT_CONFIG.scanPriceUSDC,
+      currency: 'USDC',
+      treasuryAddress: PAYMENT_CONFIG.treasuryAddress,
+      expiresIn: PAYMENT_CONFIG.paymentExpiryMinutes * 60, // seconds
+      expiresAt: new Date(Date.now() + PAYMENT_CONFIG.paymentExpiryMinutes * 60 * 1000).toISOString(),
+      instructions: `Send ${PAYMENT_CONFIG.scanPriceUSDC} USDC to ${PAYMENT_CONFIG.treasuryAddress} with payment ID: ${paymentId}`,
+    });
+  } catch (error) {
+    console.error('Error creating payment:', error);
+    res.status(500).json({ error: 'Failed to create payment' });
+  }
+});
+
+/**
+ * GET /api/payments/:id - Check payment status
+ */
+app.get('/api/payments/:id', (req, res) => {
+  const { id } = req.params;
+  const payment = payments.get(id);
+
+  if (!payment) {
+    return res.status(404).json({ error: 'Payment not found' });
+  }
+
+  // Check if expired
+  const createdAt = new Date(payment.createdAt).getTime();
+  const expiresAt = createdAt + PAYMENT_CONFIG.paymentExpiryMinutes * 60 * 1000;
+  const timeRemainingMs = expiresAt - Date.now();
+
+  if (payment.status === 'pending' && Date.now() > expiresAt) {
+    payment.status = 'expired';
+    savePayments();
+  }
+
+  res.json({
+    ...payment,
+    expiresAt: new Date(expiresAt).toISOString(),
+    isExpired: payment.status === 'expired',
+    timeRemaining: payment.status === 'pending' ? Math.max(0, Math.floor(timeRemainingMs / 1000)) : 0,
+    canSubmitTransaction: payment.status === 'pending' && timeRemainingMs > 0,
+    transactionHistory: payment.transactionHistory || [],
+  });
+});
+
+/**
+ * POST /api/payments/:id/confirm - Confirm payment (with tx hash)
+ * Verifies the USDC transaction on Arc blockchain before confirming
+ *
+ * Industry standard approach (like Jumper, Uniswap, etc.):
+ * - No attempt limits - user can cancel and try again until expiry
+ * - Only time-based expiry limits the payment window
+ * - Failed transactions are logged for analytics but don't penalize user
+ */
+app.post('/api/payments/:id/confirm', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { txHash } = req.body;
+
+    const payment = payments.get(id);
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status === 'confirmed' || payment.status === 'used') {
+      return res.status(400).json({ error: `Payment is already ${payment.status}` });
+    }
+
+    // Check if expired - this is the ONLY limit (industry standard)
+    const createdAt = new Date(payment.createdAt).getTime();
+    const expiresAt = createdAt + PAYMENT_CONFIG.paymentExpiryMinutes * 60 * 1000;
+    const timeRemainingMs = expiresAt - Date.now();
+
+    if (Date.now() > expiresAt) {
+      payment.status = 'expired';
+      savePayments();
+      return res.status(400).json({
+        error: 'Time limit reached',
+        message: 'This payment window has closed. Start a new one to continue.',
+        expired: true,
+      });
+    }
+
+    if (!txHash) {
+      return res.status(400).json({ error: 'Please provide your transaction hash' });
+    }
+
+    // Validate transaction hash format
+    if (!isValidTxHash(txHash)) {
+      return res.status(400).json({
+        error: 'Invalid hash format',
+        hint: 'Should be 66 characters starting with 0x',
+      });
+    }
+
+    // Check if this transaction hash has already been used for another payment (prevent double-spend)
+    for (const [existingId, existingPayment] of payments) {
+      if (existingId !== id && existingPayment.txHash === txHash) {
+        return res.status(400).json({
+          error: 'Already used',
+          message: 'This hash was used for a different payment. Use your new transaction hash.',
+        });
+      }
+    }
+
+    // Verify the transaction on Arc blockchain
+    console.log(`[Payments] Verifying transaction ${txHash} on Arc blockchain...`);
+
+    const verification = await verifyTransactionOnChain(
+      txHash,
+      payment.amount,
+      PAYMENT_CONFIG.treasuryAddress,
+      payment.walletAddress // Optionally verify sender matches
+    );
+
+    if (!verification.verified) {
+      // Categorize the failure reason for analytics/debugging
+      const errorMsg = verification.error || 'Unknown error';
+      let onChainStatus: 'reverted' | 'not_found' | 'amount_mismatch' | 'wrong_recipient' | undefined;
+
+      if (errorMsg.includes('reverted')) {
+        onChainStatus = 'reverted';
+      } else if (errorMsg.includes('not found') || errorMsg.includes('not yet confirmed')) {
+        onChainStatus = 'not_found';
+      } else if (errorMsg.includes('Amount mismatch')) {
+        onChainStatus = 'amount_mismatch';
+      } else if (errorMsg.includes('No USDC transfer to treasury') || errorMsg.includes('Sender mismatch')) {
+        onChainStatus = 'wrong_recipient';
+      }
+
+      // Log for analytics (does NOT limit user - they can always try again)
+      if (!payment.transactionHistory) {
+        payment.transactionHistory = [];
+      }
+      payment.transactionHistory.push({
+        txHash,
+        type: 'failed',
+        error: errorMsg,
+        timestamp: new Date().toISOString(),
+        onChainStatus,
+      });
+      savePayments();
+
+      console.log(`[Payments] Verification failed: ${errorMsg}`);
+
+      // User-friendly response - they can always try again until expiry
+      // Create user-friendly message based on status
+      let userMessage: string;
+      let steps: string[];
+
+      switch (onChainStatus) {
+        case 'not_found':
+          userMessage = 'Transaction not found yet. It may still be processing.';
+          steps = ['Wait a few seconds', 'Click verify again'];
+          break;
+        case 'reverted':
+          userMessage = 'Transaction failed on-chain. This usually means insufficient balance.';
+          steps = ['Check your USDC balance', 'Send a new transaction', 'Verify with the new hash'];
+          break;
+        case 'amount_mismatch':
+          userMessage = 'Wrong amount sent. Please send exactly the required amount.';
+          steps = ['Send the correct amount', 'Verify with the new hash'];
+          break;
+        case 'wrong_recipient':
+          userMessage = 'Funds sent to wrong address.';
+          steps = ['Copy the correct treasury address', 'Send a new transaction', 'Verify with the new hash'];
+          break;
+        default:
+          userMessage = errorMsg;
+          steps = ['Check the explorer link below', 'Try again if needed'];
+      }
+
+      return res.status(400).json({
+        error: 'Verification failed',
+        message: userMessage,
+        onChainStatus,
+        explorerUrl: getExplorerUrl(txHash),
+        details: verification.details,
+        canTryAgain: true,
+        timeRemaining: Math.floor(timeRemainingMs / 1000),
+        nextSteps: steps,
+      });
+    }
+
+    // Transaction verified! Mark as confirmed
+    payment.status = 'confirmed';
+    payment.confirmedAt = new Date().toISOString();
+    payment.txHash = txHash;
+    savePayments();
+
+    console.log(`[Payments] Payment ${id} verified and confirmed!`);
+    console.log(`[Payments] Transaction: ${txHash}`);
+    console.log(`[Payments] Amount: ${verification.details?.amount} USDC`);
+    console.log(`[Payments] From: ${verification.details?.from}`);
+    console.log(`[Payments] Block: ${verification.details?.blockNumber}`);
+
+    res.json({
+      success: true,
+      paymentId: id,
+      status: 'confirmed',
+      message: 'Payment confirmed! You can now start your scan.',
+      verification: {
+        txHash,
+        amount: verification.details?.amount,
+        from: verification.details?.from,
+        to: verification.details?.to,
+        blockNumber: verification.details?.blockNumber?.toString(),
+        explorerUrl: getExplorerUrl(txHash),
+      },
+    });
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+/**
+ * POST /api/payments/:id/canceled - Report a canceled transaction (MetaMask rejection)
+ *
+ * Called by frontend when user clicks "Reject" in MetaMask wallet popup.
+ * This is for analytics only - does NOT affect user's ability to try again.
+ * User can always try again until expiry (industry standard).
+ */
+app.post('/api/payments/:id/canceled', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body; // Optional: "user_rejected", "timeout", etc.
+
+    const payment = payments.get(id);
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({
+        error: 'Payment is not pending',
+        status: payment.status,
+      });
+    }
+
+    // Check if expired
+    const createdAt = new Date(payment.createdAt).getTime();
+    const expiresAt = createdAt + PAYMENT_CONFIG.paymentExpiryMinutes * 60 * 1000;
+    const timeRemainingMs = expiresAt - Date.now();
+
+    if (Date.now() > expiresAt) {
+      payment.status = 'expired';
+      savePayments();
+      return res.status(400).json({
+        error: 'Time limit reached',
+        message: 'Start a new payment to continue.',
+      });
+    }
+
+    // Log canceled transaction for analytics (does NOT limit user)
+    if (!payment.transactionHistory) {
+      payment.transactionHistory = [];
+    }
+    payment.transactionHistory.push({
+      type: 'canceled',
+      error: reason || 'Rejected in wallet',
+      timestamp: new Date().toISOString(),
+    });
+    savePayments();
+
+    console.log(`[Payments] Transaction canceled for payment ${id}: ${reason || 'user_rejected'}`);
+
+    // User can always try again - this is just logging for analytics
+    res.json({
+      success: true,
+      message: 'No problem! Try again when ready.',
+      paymentId: id,
+      status: 'pending',
+      timeRemaining: Math.floor(timeRemainingMs / 1000),
+      canTryAgain: true,
+    });
+  } catch (error) {
+    console.error('Error logging canceled transaction:', error);
+    res.status(500).json({ error: 'Failed to log canceled transaction' });
+  }
+});
+
+/**
+ * POST /api/scans/paid - Run a paid AI scan (requires confirmed payment)
+ */
+app.post('/api/scans/paid', rateLimitMiddleware, async (req, res) => {
+  try {
+    const ip = getClientIP(req);
+    const { paymentId, model = 'haiku' } = req.body;
+
+    if (!paymentId) {
+      return res.status(400).json({ error: 'Payment ID is required' });
+    }
+
+    const payment = payments.get(paymentId);
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status !== 'confirmed') {
+      // Clear, friendly messages for each status
+      let errorMessage: string;
+
+      switch (payment.status) {
+        case 'pending':
+          errorMessage = 'Complete your payment first, then come back to start the scan.';
+          break;
+        case 'used':
+          errorMessage = 'Already used. Start a new payment for another scan.';
+          break;
+        case 'expired':
+          errorMessage = 'Time limit reached. Start a new payment to continue.';
+          break;
+        default:
+          errorMessage = 'Something went wrong. Please start a new payment.';
+      }
+
+      return res.status(400).json({
+        error: 'Not ready yet',
+        status: payment.status,
+        message: errorMessage,
+        // For pending payments, user can try again
+        ...(payment.status === 'pending' && {
+          canTryAgain: true,
+          transactionHistory: payment.transactionHistory || [],
+        }),
+      });
+    }
+
+    if (!payment.repoUrl) {
+      return res.status(400).json({ error: 'No repository linked. Please start over.' });
+    }
+
+    // Validate GitHub URL
+    const parsed = parseGitHubUrl(payment.repoUrl);
+    if (!parsed) {
+      return res.status(400).json({ error: 'Invalid GitHub URL in payment' });
+    }
+
+    incrementRateLimit(ip);
+
+    const scanId = `scan_${Date.now()}`;
+    const displayTarget = `github.com/${parsed.owner}/${parsed.repo}`;
+
+    // Mark payment as used
+    payment.status = 'used';
+    payment.scanId = scanId;
+    savePayments();
+
+    scanStatus.set(scanId, {
+      status: 'pending',
+      message: 'Cloning repository...',
+      target: displayTarget,
+    });
+
+    res.json({
+      id: scanId,
+      status: 'pending',
+      target: displayTarget,
+      scanType: 'ai-full',
+      paymentId,
+      paid: true,
+    });
+
+    // Run full AI scan
+    runGitHubScan(scanId, payment.repoUrl, displayTarget, model, 'anthropic');
+  } catch (error) {
+    console.error('Error starting paid scan:', error);
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
+
+/**
+ * GET /api/pricing - Get current pricing tiers
+ */
+app.get('/api/pricing', (_req, res) => {
+  res.json({
+    tiers: [
+      {
+        id: 'free',
+        name: 'Free',
+        price: 0,
+        priceDisplay: 'FREE',
+        description: 'Rule-based security scan',
+        features: [
+          '91 built-in security rules',
+          '20 Arc-specific rules',
+          'Pattern-based vulnerability detection',
+          'Unlimited scans',
+          'Instant results',
+        ],
+        limitations: [
+          'No AI-powered analysis',
+          'No STRIDE threat modeling',
+          'No deep code review',
+        ],
+      },
+      {
+        id: 'trial',
+        name: 'Free Trial',
+        price: 0,
+        priceDisplay: 'FREE (1x)',
+        description: 'One free AI-powered scan per wallet',
+        features: [
+          'Everything in Free tier',
+          'Full AI-powered analysis',
+          'STRIDE threat modeling',
+          'Deep code review',
+          'Detailed remediation steps',
+        ],
+        limitations: [
+          'One scan per wallet address',
+        ],
+      },
+      {
+        id: 'paid',
+        name: 'Pay Per Scan',
+        price: PAYMENT_CONFIG.scanPriceUSDC,
+        priceDisplay: `$${PAYMENT_CONFIG.scanPriceUSDC.toFixed(2)} USDC`,
+        description: 'Full AI-powered security audit',
+        features: [
+          'Everything in Trial tier',
+          'Unlimited AI scans',
+          'Priority processing',
+          'Advanced reporting',
+        ],
+        limitations: [],
+        treasuryAddress: PAYMENT_CONFIG.treasuryAddress,
+      },
+    ],
+    payment: {
+      currency: 'USDC',
+      network: 'Arc',
+      treasuryAddress: PAYMENT_CONFIG.treasuryAddress,
+      scanPrice: PAYMENT_CONFIG.scanPriceUSDC,
+    },
+  });
+});
+
+// ==========================================
 // GitHub OAuth Endpoints
 // ==========================================
 
@@ -744,6 +1746,77 @@ async function runAuthenticatedGitHubScan(
     setTimeout(() => scanStatus.delete(scanId), 5 * 60 * 1000);
   } catch (error) {
     console.error('Authenticated scan failed:', error);
+    scanStatus.set(scanId, {
+      status: 'failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      target: displayTarget,
+    });
+
+    if (tempDir) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Run FREE rules-only scan for authenticated GitHub repos (no AI cost)
+ */
+async function runAuthenticatedFreeRulesOnlyScan(
+  scanId: string,
+  repo: GitHubRepo,
+  accessToken: string,
+  displayTarget: string
+) {
+  let tempDir: string | null = null;
+
+  try {
+    // Clone repository
+    scanStatus.set(scanId, { status: 'running', message: 'Cloning repository...', target: displayTarget });
+
+    // Create temp directory
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arcshield-'));
+    const repoPath = path.join(tempDir, repo.name);
+
+    // Clone with auth
+    const cloneUrl = getAuthenticatedCloneUrl(repo, accessToken);
+    console.log(`[GitHub] Cloning ${repo.full_name} (FREE scan)...`);
+    execSync(`git clone --depth 1 ${cloneUrl} ${repoPath}`, {
+      stdio: 'pipe',
+      timeout: 120000,
+    });
+
+    // Run rules-only scan
+    scanStatus.set(scanId, { status: 'running', message: 'Running security rules scan...', target: displayTarget });
+
+    const scanner = new Scanner({
+      target: repoPath,
+      model: 'haiku', // Not used for rules-only
+      provider: 'anthropic', // Not used for rules-only
+      outputFormat: 'json',
+      includeGenLayer: true,
+    });
+
+    // Use the scanRulesOnly method (FREE - no API calls)
+    const report = await scanner.scanRulesOnly();
+
+    // Save report
+    const filePath = path.join(SCANS_DIR, `${scanId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify({
+      ...report,
+      id: scanId,
+      target: displayTarget,
+      scanType: 'rules-only',
+      cost: 0,
+    }, null, 2));
+
+    scanStatus.set(scanId, { status: 'completed', message: 'Scan complete!', target: displayTarget });
+
+    // Cleanup
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    setTimeout(() => scanStatus.delete(scanId), 5 * 60 * 1000);
+  } catch (error) {
+    console.error('Authenticated free scan failed:', error);
     scanStatus.set(scanId, {
       status: 'failed',
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -1074,6 +2147,25 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Arc blockchain connection check
+app.get('/api/arc/status', async (_req, res) => {
+  try {
+    const connected = await checkArcConnection();
+    res.json({
+      connected,
+      network: 'Arc Testnet',
+      rpcUrl: process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
+      treasuryAddress: PAYMENT_CONFIG.treasuryAddress,
+      scanPriceUSDC: PAYMENT_CONFIG.scanPriceUSDC,
+    });
+  } catch (error) {
+    res.status(503).json({
+      connected: false,
+      error: 'Failed to connect to Arc blockchain',
+    });
+  }
+});
+
 // ==========================================
 // Production Static File Serving
 // ==========================================
@@ -1096,8 +2188,20 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`ArcShield API server running on http://localhost:${PORT}`);
   console.log(`Scans directory: ${SCANS_DIR}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Check Arc blockchain connection
+  console.log('\n[Arc] Checking blockchain connection...');
+  const arcConnected = await checkArcConnection();
+  if (arcConnected) {
+    console.log('[Arc] ✓ Connected to Arc blockchain');
+    console.log(`[Arc] Treasury: ${PAYMENT_CONFIG.treasuryAddress}`);
+    console.log(`[Arc] Scan price: ${PAYMENT_CONFIG.scanPriceUSDC} USDC`);
+  } else {
+    console.warn('[Arc] ⚠ Could not connect to Arc blockchain');
+    console.warn('[Arc] Payment verification will fail until connection is restored');
+  }
 });

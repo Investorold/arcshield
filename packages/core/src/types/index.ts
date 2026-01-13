@@ -63,6 +63,17 @@ export interface AssessmentResult {
   totalLines: number;
 }
 
+// Quick assessment for rules-only scans (no AI)
+export interface QuickAssessment {
+  applicationType: string;
+  frameworks: string[];
+  entryPoints: string[];
+  dataFlows: string[];
+  securityFeatures: string[];
+  filesAnalyzed: number;
+  linesOfCode: number;
+}
+
 export interface DataFlow {
   source: string;
   destination: string;
@@ -137,6 +148,9 @@ export interface GenLayerVulnerability extends Vulnerability {
   promptRelated: boolean;
 }
 
+// Scan type - rules-only (free) or full AI scan
+export type ScanType = 'rules-only' | 'ai-full';
+
 // Final scan report
 export interface ScanReport {
   id: string;
@@ -146,7 +160,8 @@ export interface ScanReport {
   duration: number;
   cost: number;
   score: number;
-  assessment: AssessmentResult;
+  scanType?: ScanType; // 'rules-only' for free scans, 'ai-full' for paid AI scans
+  assessment: AssessmentResult | QuickAssessment;
   threatModel: ThreatModelResult;
   vulnerabilities: VulnerabilityResult;
   smartContractVulnerabilities?: SmartContractVulnerability[];

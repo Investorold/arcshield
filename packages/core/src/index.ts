@@ -364,6 +364,138 @@ export class Scanner {
   }
 
   /**
+   * Run a FREE rule-only scan (no AI, just pattern matching)
+   * Uses 75+ built-in security rules - completely free
+   */
+  async scanRulesOnly(): Promise<ScanReport> {
+    const startTime = Date.now();
+
+    console.log('\n🛡️  ArcShield Quick Scan (Rules Only)');
+    console.log('━'.repeat(50));
+
+    // Step 1: Discover files
+    console.log('\n📂 Discovering files...');
+    const workDir = path.resolve(this.config.target);
+    const files = await walkFiles({ rootDir: workDir });
+    console.log(`   Found ${files.length} files to analyze`);
+
+    // Step 2: Run Rule Engine (pattern-based scanning)
+    console.log('\n📋 Running Rule-Based Scanner...');
+    const engine = await this.getRuleEngine();
+    const stats = engine.getStats();
+    console.log(`   Loaded ${stats.total} rules across ${Object.keys(stats.byCategory).length} categories`);
+
+    const matches = engine.scan(files);
+    const ruleBasedVulns = engine.toVulnerabilities(matches);
+    console.log(`   Found ${ruleBasedVulns.length} issues via pattern matching`);
+
+    // Step 3: Run Arc Scanner (also pattern-based, free)
+    let arcVulns: ScanReport['arcVulnerabilities'] = [];
+    const hasSolidity = files.some(f => f.path.endsWith('.sol'));
+    if (hasSolidity) {
+      console.log('\n🔗 Running Arc-Specific Scanner...');
+      arcVulns = await runArcScanner(files);
+      console.log(`   Found ${arcVulns.length} Arc-specific issues`);
+    }
+
+    const duration = Date.now() - startTime;
+
+    // Build summary
+    const summary = {
+      totalIssues: ruleBasedVulns.length + arcVulns.length,
+      critical: ruleBasedVulns.filter(v => v.severity === 'critical').length +
+                arcVulns.filter(v => v.severity === 'critical').length,
+      high: ruleBasedVulns.filter(v => v.severity === 'high').length +
+            arcVulns.filter(v => v.severity === 'high').length,
+      medium: ruleBasedVulns.filter(v => v.severity === 'medium').length +
+              arcVulns.filter(v => v.severity === 'medium').length,
+      low: ruleBasedVulns.filter(v => v.severity === 'low').length +
+           arcVulns.filter(v => v.severity === 'low').length,
+      info: ruleBasedVulns.filter(v => v.severity === 'info').length +
+            arcVulns.filter(v => v.severity === 'info').length,
+    };
+
+    // Create report (minimal - no AI analysis)
+    const report: ScanReport = {
+      id: `scan_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      target: this.config.target,
+      targetType: this.config.targetType,
+      duration,
+      cost: 0, // FREE - no AI cost
+      score: 0,
+      scanType: 'rules-only', // Mark as rules-only scan
+      assessment: {
+        applicationType: 'Unknown (Quick Scan)',
+        frameworks: [],
+        entryPoints: [],
+        dataFlows: [],
+        securityFeatures: [],
+        filesAnalyzed: files.length,
+        linesOfCode: files.reduce((acc, f) => acc + (f.content?.split('\n').length || 0), 0),
+      },
+      threatModel: {
+        threats: [],
+        summary: {
+          total: 0,
+          byCategory: {
+            spoofing: 0,
+            tampering: 0,
+            repudiation: 0,
+            information_disclosure: 0,
+            denial_of_service: 0,
+            elevation_of_privilege: 0,
+          },
+          bySeverity: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            info: 0,
+          },
+        },
+      },
+      vulnerabilities: {
+        vulnerabilities: ruleBasedVulns,
+        summary: {
+          total: ruleBasedVulns.length,
+          bySeverity: {
+            critical: ruleBasedVulns.filter(v => v.severity === 'critical').length,
+            high: ruleBasedVulns.filter(v => v.severity === 'high').length,
+            medium: ruleBasedVulns.filter(v => v.severity === 'medium').length,
+            low: ruleBasedVulns.filter(v => v.severity === 'low').length,
+            info: ruleBasedVulns.filter(v => v.severity === 'info').length,
+          },
+        },
+      },
+      smartContractVulnerabilities: [],
+      arcVulnerabilities: arcVulns,
+      genLayerVulnerabilities: [],
+      summary,
+      badge: {
+        eligible: summary.critical === 0 && summary.high === 0,
+        reason: summary.critical > 0 ? `${summary.critical} critical vulnerabilities` :
+                summary.high > 0 ? `${summary.high} high severity vulnerabilities` :
+                'Meets basic security requirements (Full AI Scan recommended)',
+      },
+    };
+
+    // Calculate score
+    report.score = this.calculateSecurityScore(report);
+
+    console.log('\n✅ Quick scan complete!');
+    console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
+    console.log(`   Cost: FREE`);
+    console.log(`   Security Score: ${report.score}/100`);
+    console.log(`   Total Issues: ${summary.totalIssues}`);
+    console.log('');
+    console.log('💡 For deeper analysis (STRIDE threats, AI code review),');
+    console.log('   run a Full AI Scan.');
+
+    return report;
+  }
+
+  /**
    * Run only the assessment phase
    */
   async assess(): Promise<ScanReport['assessment']> {

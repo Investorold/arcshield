@@ -47,6 +47,9 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/packages/core/dist ./packages/core/dist
 COPY --from=builder /app/packages/web/dist ./packages/web/dist
 
+# Copy rule JSON files (not compiled, just copied)
+COPY --from=builder /app/packages/core/src/rules/builtin ./packages/core/dist/rules/builtin
+
 # Copy package.json files needed at runtime
 COPY --from=builder /app/packages/core/package.json ./packages/core/
 COPY --from=builder /app/packages/web/package.json ./packages/web/

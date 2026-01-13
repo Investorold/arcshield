@@ -4,6 +4,7 @@ import { useStartScan } from '../hooks/useScans';
 import { useGitHubAuth, useGitHubRepos, useScanRepo } from '../hooks/useAuth';
 
 type ScanType = 'github-connected' | 'github-url' | 'upload';
+type ScanTier = 'free' | 'trial' | 'paid';
 
 export default function Scan() {
   const navigate = useNavigate();
@@ -14,7 +15,8 @@ export default function Scan() {
   const { scanRepo, status: repoStatus, loading: repoLoading, error: repoError, reset: resetRepo } = useScanRepo();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [scanType, setScanType] = useState<ScanType>('github-connected');
+  const [scanType, setScanType] = useState<ScanType>('github-url');
+  const [scanTier, setScanTier] = useState<ScanTier>('free');
   const [githubUrl, setGithubUrl] = useState('');
   const [selectedRepo, setSelectedRepo] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -22,6 +24,16 @@ export default function Scan() {
   const [provider, setProvider] = useState('anthropic');
   const [isDragging, setIsDragging] = useState(false);
   const [repoSearch, setRepoSearch] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
+  const [trialStatus, setTrialStatus] = useState<{ hasUsedTrial: boolean; loading: boolean }>({ hasUsedTrial: false, loading: false });
+  const [paymentState, setPaymentState] = useState<{
+    paymentId?: string;
+    status: 'idle' | 'awaiting_payment' | 'confirming' | 'confirmed' | 'error';
+    treasuryAddress?: string;
+    amount?: number;
+    error?: string;
+  }>({ status: 'idle' });
+  const [txHash, setTxHash] = useState('');
 
   // Handle OAuth callback
   useEffect(() => {
@@ -44,9 +56,149 @@ export default function Scan() {
   const loading = scanType === 'github-connected' ? repoLoading : urlLoading;
   const error = scanType === 'github-connected' ? repoError : urlError;
 
+  // Check trial status when wallet address changes
+  useEffect(() => {
+    if (walletAddress && walletAddress.length >= 10) {
+      setTrialStatus({ hasUsedTrial: false, loading: true });
+      fetch(`/api/wallet/${walletAddress}/trial`)
+        .then(res => res.json())
+        .then(data => {
+          setTrialStatus({ hasUsedTrial: data.hasUsedTrial, loading: false });
+        })
+        .catch(() => {
+          setTrialStatus({ hasUsedTrial: false, loading: false });
+        });
+    }
+  }, [walletAddress]);
+
+  // Create payment for paid tier
+  const createPayment = async () => {
+    if (!githubUrl.trim() || !walletAddress) return;
+
+    try {
+      const response = await fetch('/api/payments/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress, repoUrl: githubUrl }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        setPaymentState({ status: 'error', error: data.error });
+        return;
+      }
+
+      setPaymentState({
+        status: 'awaiting_payment',
+        paymentId: data.paymentId,
+        treasuryAddress: data.treasuryAddress,
+        amount: data.amount,
+      });
+    } catch (err) {
+      setPaymentState({ status: 'error', error: 'Failed to create payment' });
+    }
+  };
+
+  // Confirm payment with transaction hash
+  const confirmPayment = async () => {
+    if (!paymentState.paymentId || !txHash) return;
+
+    setPaymentState(prev => ({ ...prev, status: 'confirming' }));
+
+    try {
+      const response = await fetch(`/api/payments/${paymentState.paymentId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        setPaymentState(prev => ({ ...prev, status: 'error', error: data.error }));
+        return;
+      }
+
+      setPaymentState(prev => ({ ...prev, status: 'confirmed' }));
+    } catch (err) {
+      setPaymentState(prev => ({ ...prev, status: 'error', error: 'Failed to confirm payment' }));
+    }
+  };
+
+  // Start paid scan after payment confirmed
+  const startPaidScan = async () => {
+    if (!paymentState.paymentId) return;
+
+    try {
+      const response = await fetch('/api/scans/paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: paymentState.paymentId, model }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        alert(data.message || data.error);
+        return;
+      }
+
+      if (data.id) {
+        navigate(`/report/${data.id}`);
+      }
+    } catch (err) {
+      console.error('Paid scan error:', err);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Handle different tiers
+    if (scanTier === 'free') {
+      // Free rules-only scan
+      if (!githubUrl.trim()) return;
+
+      try {
+        const response = await fetch('/api/scans/free', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: githubUrl }),
+        });
+        const data = await response.json();
+        if (data.id) {
+          // Use the same status tracking
+          navigate(`/report/${data.id}`);
+        }
+      } catch (err) {
+        console.error('Free scan error:', err);
+      }
+      return;
+    }
+
+    if (scanTier === 'trial') {
+      // Trial AI scan (requires wallet)
+      if (!githubUrl.trim() || !walletAddress) return;
+
+      try {
+        const response = await fetch('/api/scans/trial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: githubUrl, walletAddress, model }),
+        });
+        const data = await response.json();
+        if (data.error) {
+          alert(data.message || data.error);
+          return;
+        }
+        if (data.id) {
+          navigate(`/report/${data.id}`);
+        }
+      } catch (err) {
+        console.error('Trial scan error:', err);
+      }
+      return;
+    }
+
+    // Original behavior for connected repos
     if (scanType === 'github-connected') {
       if (!selectedRepo || !sessionId) return;
       await scanRepo(sessionId, selectedRepo, model, provider);
@@ -199,8 +351,8 @@ export default function Scan() {
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <span className="mr-2">🌐</span>
-            Public URL
+            <span className="mr-2">🔓</span>
+            Public Repo
           </button>
           <button
             type="button"
@@ -216,7 +368,268 @@ export default function Scan() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        {/* Scan Tier Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-300 mb-3">
+            Select Scan Type
+          </label>
+          <div className="grid grid-cols-3 gap-3">
+            {/* Free Tier */}
+            <button
+              type="button"
+              onClick={() => setScanTier('free')}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                scanTier === 'free'
+                  ? 'border-green-500 bg-green-500/10'
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg font-bold text-green-400">FREE</span>
+                <span className="text-2xl">🆓</span>
+              </div>
+              <p className="text-sm text-gray-400">Rule-based scan</p>
+              <p className="text-xs text-gray-500 mt-1">91 security rules</p>
+            </button>
+
+            {/* Trial Tier */}
+            <button
+              type="button"
+              onClick={() => setScanTier('trial')}
+              disabled={trialStatus.hasUsedTrial}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                scanTier === 'trial'
+                  ? 'border-arc-purple bg-arc-purple/10'
+                  : trialStatus.hasUsedTrial
+                  ? 'border-gray-700 bg-gray-800 opacity-50 cursor-not-allowed'
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg font-bold text-arc-purple">TRIAL</span>
+                <span className="text-2xl">🎁</span>
+              </div>
+              <p className="text-sm text-gray-400">Full AI scan</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {trialStatus.hasUsedTrial ? 'Already used' : '1 free per wallet'}
+              </p>
+            </button>
+
+            {/* Paid Tier */}
+            <button
+              type="button"
+              onClick={() => setScanTier('paid')}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                scanTier === 'paid'
+                  ? 'border-yellow-500 bg-yellow-500/10'
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg font-bold text-yellow-400">$0.10</span>
+                <span className="text-2xl">💰</span>
+              </div>
+              <p className="text-sm text-gray-400">Pay per scan</p>
+              <p className="text-xs text-gray-500 mt-1">USDC on Arc</p>
+            </button>
+          </div>
+        </div>
+
+        {/* Wallet Address Input for Trial or Paid */}
+        {(scanTier === 'trial' || scanTier === 'paid') && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Wallet Address {scanTier === 'trial' ? '(for trial tracking)' : '(for payment)'}
+            </label>
+            <input
+              type="text"
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
+              placeholder="0x..."
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
+            />
+            {scanTier === 'trial' && trialStatus.loading && (
+              <p className="text-xs text-gray-500 mt-1">Checking trial status...</p>
+            )}
+            {scanTier === 'trial' && walletAddress && !trialStatus.loading && (
+              <p className={`text-xs mt-1 ${trialStatus.hasUsedTrial ? 'text-red-400' : 'text-green-400'}`}>
+                {trialStatus.hasUsedTrial
+                  ? 'This wallet has already used its free trial'
+                  : 'Free trial available for this wallet!'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Payment Flow for Paid Tier */}
+        {scanTier === 'paid' && (
+          <div className="mb-6 bg-gray-700/50 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-gray-300 mb-3">Payment Flow</h3>
+
+            {paymentState.status === 'idle' && (
+              <div className="text-sm text-gray-400">
+                <p>1. Enter GitHub URL and wallet address above</p>
+                <p>2. Click "Create Payment" to get payment details</p>
+                <p>3. Send USDC and confirm with transaction hash</p>
+              </div>
+            )}
+
+            {(paymentState.status === 'awaiting_payment' || paymentState.status === 'confirming') && paymentState.paymentId && (
+              <div className="space-y-3">
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                  <p className="text-yellow-400 font-medium mb-2">Payment Required</p>
+                  <div className="text-sm text-gray-300 space-y-1">
+                    <p><span className="text-gray-500">Amount:</span> {paymentState.amount} USDC</p>
+                    <p><span className="text-gray-500">Send to:</span></p>
+                    <p className="font-mono text-xs bg-gray-800 p-2 rounded break-all">{paymentState.treasuryAddress}</p>
+                    <p><span className="text-gray-500">Payment ID:</span></p>
+                    <p className="font-mono text-xs bg-gray-800 p-2 rounded">{paymentState.paymentId}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Transaction Hash (after sending USDC)
+                  </label>
+                  <input
+                    type="text"
+                    value={txHash}
+                    onChange={(e) => setTxHash(e.target.value)}
+                    placeholder="0x..."
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={confirmPayment}
+                  disabled={!txHash || paymentState.status === 'confirming'}
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-medium py-2 rounded-lg transition-colors"
+                >
+                  {paymentState.status === 'confirming' ? 'Confirming...' : 'Confirm Payment'}
+                </button>
+              </div>
+            )}
+
+            {paymentState.status === 'confirmed' && (
+              <div className="space-y-3">
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                  <p className="text-green-400 font-medium">Payment Confirmed!</p>
+                  <p className="text-sm text-gray-400 mt-1">You can now start your AI scan.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={startPaidScan}
+                  className="w-full bg-arc-purple hover:bg-arc-purple/80 text-white font-medium py-3 rounded-lg transition-colors"
+                >
+                  Start AI Scan
+                </button>
+              </div>
+            )}
+
+            {paymentState.status === 'error' && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                <p className="text-red-400">{paymentState.error}</p>
+                <button
+                  type="button"
+                  onClick={() => setPaymentState({ status: 'idle' })}
+                  className="text-sm text-gray-400 hover:text-white mt-2"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* GitHub URL for all tiers */}
+        <div className="mb-6">
+          <label htmlFor="github-url" className="block text-sm font-medium text-gray-300 mb-2">
+            GitHub Repository URL
+          </label>
+          <input
+            type="text"
+            id="github-url"
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo"
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-arc-purple"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            {scanTier === 'free'
+              ? 'Free scan uses 91 security rules (no AI)'
+              : scanTier === 'trial'
+              ? 'Trial uses full AI-powered analysis'
+              : 'Paid scan uses full AI-powered analysis ($0.10 USDC)'}
+          </p>
+        </div>
+
+        {/* Features List for selected tier */}
+        <div className="bg-gray-700/50 rounded-lg p-4 mb-6">
+          <h3 className="text-sm font-medium text-gray-300 mb-2">
+            {scanTier === 'free' ? 'Free Scan includes:' : 'AI Scan includes:'}
+          </h3>
+          <ul className="text-sm text-gray-400 space-y-1">
+            {scanTier === 'free' ? (
+              <>
+                <li>✓ 91 built-in security rules</li>
+                <li>✓ 20 Arc-specific checks</li>
+                <li>✓ Pattern-based vulnerability detection</li>
+                <li>✓ Smart contract analysis</li>
+                <li className="text-gray-500">✗ No AI-powered analysis</li>
+                <li className="text-gray-500">✗ No STRIDE threat modeling</li>
+              </>
+            ) : (
+              <>
+                <li>✓ Everything in Free tier</li>
+                <li>✓ Architecture assessment</li>
+                <li>✓ STRIDE threat modeling</li>
+                <li>✓ AI-powered code review</li>
+                <li>✓ Detailed remediation steps</li>
+              </>
+            )}
+          </ul>
+        </div>
+
+        {/* Submit Button */}
+        {scanTier !== 'paid' && (
+          <button
+            type="button"
+            onClick={handleSubmit as any}
+            disabled={
+              loading ||
+              (scanTier === 'trial' && (!walletAddress || trialStatus.hasUsedTrial)) ||
+              !githubUrl.trim()
+            }
+            className="w-full bg-arc-purple hover:bg-arc-purple/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition-colors mb-4"
+          >
+            {loading
+              ? 'Starting Scan...'
+              : scanTier === 'free'
+              ? 'Start Free Scan'
+              : 'Use Free Trial'}
+          </button>
+        )}
+
+        {/* Create Payment Button for Paid Tier */}
+        {scanTier === 'paid' && paymentState.status === 'idle' && (
+          <button
+            type="button"
+            onClick={createPayment}
+            disabled={!githubUrl.trim() || !walletAddress}
+            className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black py-3 rounded-lg font-medium transition-colors mb-4"
+          >
+            Create Payment ($0.10 USDC)
+          </button>
+        )}
+
+        {/* Divider for advanced options */}
+        <div className="border-t border-gray-700 pt-4 mt-4">
+          <details className="text-gray-400">
+            <summary className="cursor-pointer text-sm hover:text-white">Advanced options (Connected repos, upload)</summary>
+
+        <form onSubmit={handleSubmit} className="mt-4">
           {/* GitHub Connected Repos */}
           {scanType === 'github-connected' && (
             <div className="mb-6">
@@ -340,7 +753,7 @@ export default function Scan() {
                 required={scanType === 'github-url'}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Paste any public GitHub repository URL
+                Scan any public GitHub repo without signing in (e.g. github.com/owner/repo)
               </p>
             </div>
           )}
@@ -479,6 +892,8 @@ export default function Scan() {
             </button>
           )}
         </form>
+        </details>
+        </div>
       </div>
     </div>
   );

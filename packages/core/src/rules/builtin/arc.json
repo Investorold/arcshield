@@ -1,0 +1,588 @@
+{
+  "name": "Arc Blockchain Security Rules",
+  "version": "1.0.0",
+  "description": "Security rules specific to the Arc blockchain ecosystem",
+  "author": "ArcShield",
+  "rules": [
+    {
+      "id": "ARC001",
+      "name": "Using block.prevrandao",
+      "description": "block.prevrandao is always 0 on Arc - do not use for randomness",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "block\\.prevrandao",
+          "flags": "gi",
+          "description": "Using prevrandao for randomness"
+        },
+        {
+          "pattern": "block\\.difficulty",
+          "flags": "gi",
+          "description": "Using difficulty (alias for prevrandao)"
+        }
+      ],
+      "cwe": "CWE-330",
+      "remediation": "Use Chainlink VRF or another verifiable randomness source. block.prevrandao is always 0 on Arc.",
+      "enabled": true,
+      "tags": ["arc", "randomness"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC002",
+      "name": "Hardcoded 6 Decimal Assumption",
+      "description": "Arc native USDC uses 18 decimals, ERC-20 interface uses 6. Mixing causes loss of funds.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "10\\s*\\*\\*\\s*6",
+          "flags": "gi",
+          "description": "Hardcoded 10**6"
+        },
+        {
+          "pattern": "1000000(?!0)",
+          "flags": "g",
+          "description": "Hardcoded 1000000 (6 decimals)"
+        },
+        {
+          "pattern": "1e6(?![0-9])",
+          "flags": "gi",
+          "description": "Hardcoded 1e6"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "decimals\\(\\)|IERC20Metadata",
+          "flags": "gi",
+          "description": "Using decimals() function"
+        }
+      ],
+      "cwe": "CWE-682",
+      "remediation": "Use decimals() to get correct precision. Arc native balance is 18 decimals, ERC-20 interface is 6 decimals.",
+      "enabled": true,
+      "tags": ["arc", "decimals", "usdc"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC003",
+      "name": "Strict Timestamp Comparison",
+      "description": "Multiple blocks can share same timestamp on Arc - strict comparisons may fail",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "block\\.timestamp\\s*==",
+          "flags": "gi",
+          "description": "Strict equality with timestamp"
+        },
+        {
+          "pattern": "block\\.timestamp\\s*!=",
+          "flags": "gi",
+          "description": "Strict inequality with timestamp"
+        },
+        {
+          "pattern": "require\\s*\\(\\s*block\\.timestamp\\s*>\\s*[^=]",
+          "flags": "gi",
+          "description": "Strict greater than timestamp"
+        }
+      ],
+      "cwe": "CWE-367",
+      "remediation": "Use >= or <= instead of strict equality for timestamp checks. Multiple blocks can share timestamps on Arc.",
+      "enabled": true,
+      "tags": ["arc", "timestamp"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC004",
+      "name": "Unnecessary Confirmation Waits",
+      "description": "Arc has instant deterministic finality - no need to wait for confirmations",
+      "severity": "low",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "block\\.number\\s*>\\s*\\w+\\s*\\+\\s*\\d+",
+          "flags": "gi",
+          "description": "Waiting for block confirmations"
+        },
+        {
+          "pattern": "confirmations",
+          "flags": "gi",
+          "description": "Confirmation wait logic"
+        },
+        {
+          "pattern": "waitForConfirmation",
+          "flags": "gi",
+          "description": "Wait for confirmation function"
+        }
+      ],
+      "cwe": null,
+      "remediation": "Arc transactions are final immediately - single confirmation is sufficient. Remove unnecessary confirmation waits.",
+      "enabled": true,
+      "tags": ["arc", "finality"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC005",
+      "name": "SELFDESTRUCT in Constructor",
+      "description": "SELFDESTRUCT during deployment reverts on Arc if sending value to self",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "constructor[\\s\\S]*?selfdestruct",
+          "flags": "gi",
+          "multiline": true,
+          "description": "Selfdestruct in constructor"
+        },
+        {
+          "pattern": "constructor[\\s\\S]*?suicide",
+          "flags": "gi",
+          "multiline": true,
+          "description": "Suicide in constructor (deprecated)"
+        }
+      ],
+      "cwe": "CWE-670",
+      "remediation": "Avoid selfdestruct in constructors. On Arc, SELFDESTRUCT reverts if sending value to self during deployment.",
+      "enabled": true,
+      "tags": ["arc", "selfdestruct"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC006",
+      "name": "Missing USDC Blocklist Handling",
+      "description": "Arc enforces USDC blocklists - transfers to/from blocklisted addresses revert",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "IERC20.*\\.transfer\\(",
+          "flags": "gi",
+          "description": "ERC20 transfer without try-catch"
+        },
+        {
+          "pattern": "IERC20.*\\.transferFrom\\(",
+          "flags": "gi",
+          "description": "ERC20 transferFrom without try-catch"
+        },
+        {
+          "pattern": "USDC.*\\.transfer\\(",
+          "flags": "gi",
+          "description": "USDC transfer"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "try\\s+.*transfer|safeTransfer",
+          "flags": "gi",
+          "description": "Using try-catch or safeTransfer"
+        }
+      ],
+      "cwe": "CWE-754",
+      "remediation": "Implement try-catch for USDC transfers to handle blocklist reverts gracefully. Arc enforces USDC blocklists at protocol level.",
+      "enabled": true,
+      "tags": ["arc", "usdc", "blocklist"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC007",
+      "name": "Mixed Decimal Interface Usage",
+      "description": "Mixing native (18 decimals) and ERC-20 (6 decimals) USDC interfaces causes fund loss",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "msg\\.value.*10\\*\\*6|10\\*\\*6.*msg\\.value",
+          "flags": "gi",
+          "description": "Mixing msg.value with 6 decimal calculations"
+        },
+        {
+          "pattern": "msg\\.value.*1e6|1e6.*msg\\.value",
+          "flags": "gi",
+          "description": "Mixing msg.value with 1e6"
+        }
+      ],
+      "cwe": "CWE-682",
+      "remediation": "Be consistent with decimal handling - native balance is 18 decimals, ERC-20 is 6 decimals. Never mix them directly.",
+      "enabled": true,
+      "tags": ["arc", "decimals"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC010",
+      "name": "Validator/Coinbase Dependency",
+      "description": "Logic dependent on validator set or coinbase may behave differently on Arc",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "block\\.coinbase",
+          "flags": "gi",
+          "description": "Using block.coinbase"
+        },
+        {
+          "pattern": "coinbase",
+          "flags": "gi",
+          "description": "Coinbase reference"
+        }
+      ],
+      "cwe": "CWE-362",
+      "remediation": "Don't rely on specific validator behavior or coinbase address. Arc uses permissioned Proof-of-Authority validators.",
+      "enabled": true,
+      "tags": ["arc", "validator"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC011",
+      "name": "Native Token Handling",
+      "description": "Arc native token (USDC) differs from ETH - ensure correct handling",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "msg\\.value",
+          "flags": "gi",
+          "description": "Using msg.value"
+        },
+        {
+          "pattern": "payable\\(",
+          "flags": "gi",
+          "description": "Payable function or address"
+        }
+      ],
+      "cwe": "CWE-682",
+      "remediation": "On Arc, msg.value is USDC (18 decimals), not ETH. Verify your logic handles USDC semantics correctly.",
+      "enabled": true,
+      "tags": ["arc", "usdc", "native"],
+      "confidence": "low"
+    },
+    {
+      "id": "ARC016",
+      "name": "USYC Decimal Mismatch",
+      "description": "USYC uses 6 decimals (not 18 like Arc native). Mixing causes loss of funds.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "USYC",
+          "flags": "gi",
+          "description": "USYC token reference"
+        },
+        {
+          "pattern": "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C",
+          "flags": "gi",
+          "description": "USYC contract address"
+        }
+      ],
+      "cwe": "CWE-682",
+      "remediation": "USYC uses 6 decimals. Always call decimals() and handle accordingly. Don't mix with Arc native 18 decimals.",
+      "enabled": true,
+      "tags": ["arc", "usyc", "decimals"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC017",
+      "name": "Missing USYC Allowlist Check",
+      "description": "USYC requires allowlisting via Entitlements contract. Transfers to non-allowlisted addresses revert.",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "USYC.*transfer",
+          "flags": "gi",
+          "description": "USYC transfer"
+        },
+        {
+          "pattern": "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C.*transfer",
+          "flags": "gi",
+          "description": "USYC address with transfer"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "Entitlements|allowlist|isAllowed",
+          "flags": "gi",
+          "description": "Checking entitlements"
+        }
+      ],
+      "cwe": "CWE-754",
+      "remediation": "Check Entitlements contract (0xcc205224862c7641930c87679e98999d23c26113) before USYC transfers. Non-allowlisted addresses will revert.",
+      "enabled": true,
+      "tags": ["arc", "usyc", "compliance"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC018",
+      "name": "USYC Balance Caching",
+      "description": "USYC is yield-bearing - balances change over time without transfers",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "USYC.*balanceOf",
+          "flags": "gi",
+          "description": "Getting USYC balance"
+        },
+        {
+          "pattern": "cached.*USYC|USYC.*cached",
+          "flags": "gi",
+          "description": "Cached USYC value"
+        }
+      ],
+      "cwe": "CWE-362",
+      "remediation": "Don't cache USYC balances - they accrue yield and change over time. Always read fresh balance when needed.",
+      "enabled": true,
+      "tags": ["arc", "usyc", "yield"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC019",
+      "name": "CCTP Domain Validation",
+      "description": "Arc's CCTP domain ID is 26. Using wrong domain causes failed cross-chain transfers.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "destinationDomain",
+          "flags": "gi",
+          "description": "CCTP destination domain"
+        },
+        {
+          "pattern": "sourceDomain",
+          "flags": "gi",
+          "description": "CCTP source domain"
+        },
+        {
+          "pattern": "TokenMessenger",
+          "flags": "gi",
+          "description": "CCTP TokenMessenger"
+        },
+        {
+          "pattern": "depositForBurn",
+          "flags": "gi",
+          "description": "CCTP burn function"
+        }
+      ],
+      "cwe": "CWE-345",
+      "remediation": "Arc CCTP domain = 26. Ethereum = 0, Avalanche = 1, Base = 6. Always validate domain IDs in cross-chain logic.",
+      "enabled": true,
+      "tags": ["arc", "cctp", "bridge"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC020",
+      "name": "Gateway Transfer Instead of Deposit",
+      "description": "Gateway requires deposit() function, not standard transfer(). Direct transfers are lost.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "GatewayWallet.*transfer|transfer.*GatewayWallet",
+          "flags": "gi",
+          "description": "Transfer to GatewayWallet"
+        },
+        {
+          "pattern": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9.*transfer",
+          "flags": "gi",
+          "description": "Transfer to Gateway address"
+        }
+      ],
+      "excludePatterns": [
+        {
+          "pattern": "\\.deposit\\(|GatewayWallet.*deposit",
+          "flags": "gi",
+          "description": "Using deposit function"
+        }
+      ],
+      "cwe": "CWE-670",
+      "remediation": "Use GatewayWallet.deposit(token, amount) instead of transfer(). Direct transfers don't credit unified balance - funds are lost!",
+      "enabled": true,
+      "tags": ["arc", "gateway", "bridge"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC021",
+      "name": "Gateway Signature Replay",
+      "description": "Gateway burn intents use EIP-712 signatures. Missing salt/nonce allows replay attacks.",
+      "severity": "critical",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "burnIntent",
+          "flags": "gi",
+          "description": "Burn intent"
+        },
+        {
+          "pattern": "GatewayMinter",
+          "flags": "gi",
+          "description": "Gateway minter"
+        },
+        {
+          "pattern": "gatewayMint",
+          "flags": "gi",
+          "description": "Gateway mint function"
+        }
+      ],
+      "cwe": "CWE-294",
+      "remediation": "Include random salt in burn intents. Verify attestation signatures before minting. Check nonce to prevent replay.",
+      "enabled": true,
+      "tags": ["arc", "gateway", "signature"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC022",
+      "name": "Missing Permit2 Deadline",
+      "description": "Permit2 signatures without deadline can be replayed indefinitely",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "Permit2",
+          "flags": "gi",
+          "description": "Permit2 reference"
+        },
+        {
+          "pattern": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "flags": "gi",
+          "description": "Permit2 address"
+        },
+        {
+          "pattern": "permitTransferFrom",
+          "flags": "gi",
+          "description": "Permit2 transfer"
+        }
+      ],
+      "cwe": "CWE-294",
+      "remediation": "Always include reasonable deadline in Permit2 signatures. Validate deadline on-chain before processing permit.",
+      "enabled": true,
+      "tags": ["arc", "permit2", "authorization"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC023",
+      "name": "FxEscrow Settlement Timing",
+      "description": "StableFX escrow has timing requirements. Early/late settlement may fail or lock funds.",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity", "javascript", "typescript"],
+      "patterns": [
+        {
+          "pattern": "FxEscrow",
+          "flags": "gi",
+          "description": "FxEscrow reference"
+        },
+        {
+          "pattern": "0x1f91886C7028986aD885ffCee0e40b75C9cd5aC1",
+          "flags": "gi",
+          "description": "FxEscrow address"
+        },
+        {
+          "pattern": "StableFX",
+          "flags": "gi",
+          "description": "StableFX reference"
+        }
+      ],
+      "cwe": "CWE-367",
+      "remediation": "Handle escrow expiry and settlement windows correctly. Implement timeout handling for failed settlements.",
+      "enabled": true,
+      "tags": ["arc", "fx", "settlement"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC024",
+      "name": "EURC Decimal Handling",
+      "description": "EURC uses 6 decimals. Don't confuse with Arc native USDC (18 decimals).",
+      "severity": "high",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "EURC",
+          "flags": "gi",
+          "description": "EURC reference"
+        },
+        {
+          "pattern": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+          "flags": "gi",
+          "description": "EURC address"
+        }
+      ],
+      "cwe": "CWE-682",
+      "remediation": "EURC uses 6 decimals like standard stablecoins. Always use decimals() function. Don't mix with Arc native 18 decimals.",
+      "enabled": true,
+      "tags": ["arc", "eurc", "decimals"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ARC025",
+      "name": "EIP-4844 Blob Usage",
+      "description": "EIP-4844 blob transactions are disabled on Arc. Blob-dependent code will fail.",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "blobhash",
+          "flags": "gi",
+          "description": "Blob hash opcode"
+        },
+        {
+          "pattern": "BLOBHASH",
+          "flags": "g",
+          "description": "BLOBHASH opcode"
+        },
+        {
+          "pattern": "blobVersionedHashes",
+          "flags": "gi",
+          "description": "Blob versioned hashes"
+        }
+      ],
+      "cwe": "CWE-573",
+      "remediation": "EIP-4844 blobs are disabled on Arc. Use alternative data availability solutions or calldata.",
+      "enabled": true,
+      "tags": ["arc", "eip4844", "compatibility"],
+      "confidence": "high"
+    },
+    {
+      "id": "ARC026",
+      "name": "Beacon Block Root Usage",
+      "description": "Arc has no beacon chain. PARENT_BEACON_BLOCK_ROOT returns keccak256(RLP(header)) not SSZ root.",
+      "severity": "medium",
+      "category": "smart_contract",
+      "languages": ["solidity"],
+      "patterns": [
+        {
+          "pattern": "parentBeaconBlockRoot",
+          "flags": "gi",
+          "description": "Parent beacon block root"
+        },
+        {
+          "pattern": "BEACON_ROOT",
+          "flags": "g",
+          "description": "Beacon root constant"
+        }
+      ],
+      "cwe": "CWE-573",
+      "remediation": "Don't rely on beacon chain data. Arc uses keccak256(RLP(header)) instead of SSZ beacon root.",
+      "enabled": true,
+      "tags": ["arc", "beacon", "compatibility"],
+      "confidence": "high"
+    }
+  ]
+}
