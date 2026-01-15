@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useState } from 'react';
+import { Search, Code2 } from 'lucide-react';
 import { useScan } from '../hooks/useScans';
 import ScoreGauge from '../components/ScoreGauge';
 import SeverityStats from '../components/SeverityStats';
@@ -43,7 +44,7 @@ export default function Report() {
     return (
       <div className="max-w-md mx-auto mt-12">
         <div className="bg-gray-800 rounded-lg p-6 text-center">
-          <div className="text-4xl mb-4">🔍</div>
+          <Search className="w-12 h-12 mb-4 text-gray-500 mx-auto" aria-hidden="true" />
           <h2 className="text-xl font-semibold mb-2">Scan Not Found</h2>
           <p className="text-gray-400 text-sm mb-6">
             This scan may have expired or doesn't exist.
@@ -74,11 +75,21 @@ export default function Report() {
           <h1 className="text-3xl font-bold">Security Report</h1>
           <p className="text-gray-400 mt-1 font-mono">{scan.target}</p>
         </div>
-        <div className="text-right text-sm text-gray-400">
-          <p>Scan ID: {scan.id}</p>
-          <p>{new Date(scan.timestamp).toLocaleString()}</p>
-          <p>Duration: {((scan.duration || 0) / 1000).toFixed(1)}s</p>
-          <p>Cost: ${(scan.cost || 0).toFixed(4)}</p>
+        <div className="flex items-start gap-4">
+          <Link
+            to={`/report/${scan.id}/ide`}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+            title="Open IDE View"
+          >
+            <Code2 className="w-4 h-4" />
+            IDE View
+          </Link>
+          <div className="text-right text-sm text-gray-400">
+            <p>Scan ID: {scan.id}</p>
+            <p>{new Date(scan.timestamp).toLocaleString()}</p>
+            <p>Duration: {((scan.duration || 0) / 1000).toFixed(1)}s</p>
+            <p>Cost: ${(scan.cost || 0).toFixed(4)}</p>
+          </div>
         </div>
       </div>
 
