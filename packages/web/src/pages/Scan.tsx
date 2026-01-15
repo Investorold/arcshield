@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, CheckCircle, XCircle, Link as LinkIcon, Globe, Upload, Lock, FolderOpen, Loader } from 'lucide-react';
 import { useStartScan } from '../hooks/useScans';
 import { useGitHubAuth, useGitHubRepos, useScanRepo } from '../hooks/useAuth';
 
@@ -347,7 +348,7 @@ export default function Scan() {
           <div className="text-center">
             {status.status === 'pending' && (
               <>
-                <div className="text-5xl mb-4">⏳</div>
+                <Loader className="w-12 h-12 mb-4 text-gray-400 animate-spin mx-auto" aria-hidden="true" />
                 <h2 className="text-xl font-semibold">Initializing</h2>
                 <p className="text-gray-400 mt-2">{status.message || 'Preparing...'}</p>
               </>
@@ -355,7 +356,7 @@ export default function Scan() {
 
             {status.status === 'running' && (
               <>
-                <div className="text-5xl mb-4 animate-pulse">🔍</div>
+                <Search className="w-12 h-12 mb-4 text-arc-purple animate-pulse mx-auto" aria-hidden="true" />
                 <h2 className="text-xl font-semibold">Scanning</h2>
                 <p className="text-gray-400 mt-2">{status.message || 'Analyzing...'}</p>
                 <div className="mt-4 bg-gray-700 rounded-full h-2 overflow-hidden">
@@ -366,7 +367,7 @@ export default function Scan() {
 
             {status.status === 'completed' && (
               <>
-                <div className="text-5xl mb-4">✅</div>
+                <CheckCircle className="w-12 h-12 mb-4 text-green-400 mx-auto" aria-hidden="true" />
                 <h2 className="text-xl font-semibold text-green-400">Complete</h2>
                 <div className="mt-6 flex gap-3 justify-center">
                   <button onClick={handleViewReport} className="bg-arc-purple hover:bg-arc-purple/80 text-white px-6 py-2 rounded-lg">
@@ -381,7 +382,7 @@ export default function Scan() {
 
             {status.status === 'failed' && (
               <>
-                <div className="text-5xl mb-4">❌</div>
+                <XCircle className="w-12 h-12 mb-4 text-red-400 mx-auto" aria-hidden="true" />
                 <h2 className="text-xl font-semibold text-red-400">Failed</h2>
                 <p className="text-gray-400 mt-2">{status.message}</p>
                 <button onClick={handleNewScan} className="mt-6 bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg">
@@ -411,29 +412,32 @@ export default function Scan() {
           <button
             type="button"
             onClick={() => setScanType('github-connected')}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
               scanType === 'github-connected' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            🔗 My Repos
+            <LinkIcon className="w-4 h-4" aria-hidden="true" />
+            My Repos
           </button>
           <button
             type="button"
             onClick={() => setScanType('github-url')}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
               scanType === 'github-url' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            🌐 Public URL
+            <Globe className="w-4 h-4" aria-hidden="true" />
+            Public URL
           </button>
           <button
             type="button"
             onClick={() => setScanType('upload')}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium ${
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
               scanType === 'upload' ? 'bg-arc-purple text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            📁 Upload
+            <Upload className="w-4 h-4" aria-hidden="true" />
+            Upload
           </button>
         </div>
 
@@ -489,7 +493,10 @@ export default function Scan() {
                           selectedRepo === repo.full_name ? 'bg-arc-purple/20' : 'hover:bg-gray-700/50'
                         }`}
                       >
-                        <span>{repo.private ? '🔒' : '📂'} {repo.name}</span>
+                        <span className="flex items-center gap-2">
+                          {repo.private ? <Lock className="w-4 h-4 text-yellow-500" /> : <FolderOpen className="w-4 h-4 text-gray-400" />}
+                          {repo.name}
+                        </span>
                       </button>
                     ))
                   )}

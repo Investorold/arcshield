@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import { useScans } from '../hooks/useScans';
 import ScoreGauge from '../components/ScoreGauge';
 import SeverityStats from '../components/SeverityStats';
@@ -41,7 +42,7 @@ export default function Home() {
 
       {scans.length === 0 ? (
         <div className="bg-gray-800 rounded-lg p-12 text-center">
-          <span className="text-6xl">🔍</span>
+          <Search className="w-16 h-16 mx-auto text-gray-500" aria-hidden="true" />
           <h2 className="text-xl font-semibold mt-4">No scans yet</h2>
           <p className="text-gray-400 mt-2">Run your first security scan to see results here</p>
           <Link

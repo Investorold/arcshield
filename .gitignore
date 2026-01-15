@@ -56,3 +56,4 @@ Thumbs.db
 *secret*
 *credential*
 .env
+.vercel

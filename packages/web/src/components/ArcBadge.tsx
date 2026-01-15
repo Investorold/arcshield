@@ -1,3 +1,5 @@
+import { Trophy, AlertTriangle } from 'lucide-react';
+
 interface ArcBadgeProps {
   eligible: boolean;
   reason?: string;
@@ -11,7 +13,10 @@ export default function ArcBadge({ eligible, reason }: ArcBadgeProps) {
         : 'bg-red-500/10 border-red-500/30'
     }`}>
       <div className="flex items-center gap-3">
-        <span className="text-3xl">{eligible ? '🏆' : '⚠️'}</span>
+        {eligible
+          ? <Trophy className="w-8 h-8 text-yellow-400" aria-hidden="true" />
+          : <AlertTriangle className="w-8 h-8 text-red-400" aria-hidden="true" />
+        }
         <div>
           <h4 className={`font-semibold ${eligible ? 'text-green-400' : 'text-red-400'}`}>
             {eligible ? 'Eligible for ArcShield Verified Badge' : 'Not Eligible for Badge'}

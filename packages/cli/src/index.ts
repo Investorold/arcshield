@@ -91,12 +91,25 @@ program
 
       console.log('\n📋 Assessment Results');
       console.log('━'.repeat(50));
-      console.log(`Application Type: ${assessment.architecture.type}`);
-      console.log(`Frameworks: ${assessment.architecture.frameworks.join(', ')}`);
-      console.log(`Entry Points: ${assessment.architecture.entryPoints.length}`);
-      console.log(`Data Flows: ${assessment.dataFlows.length}`);
-      console.log(`Auth Mechanisms: ${assessment.authMechanisms.length}`);
-      console.log(`External Dependencies: ${assessment.externalDependencies.length}`);
+
+      // Handle both AssessmentResult (full AI) and QuickAssessment (rules-only)
+      if ('architecture' in assessment) {
+        // Full AI assessment
+        console.log(`Application Type: ${assessment.architecture.type}`);
+        console.log(`Frameworks: ${assessment.architecture.frameworks.join(', ')}`);
+        console.log(`Entry Points: ${assessment.architecture.entryPoints.length}`);
+        console.log(`Data Flows: ${assessment.dataFlows.length}`);
+        console.log(`Auth Mechanisms: ${assessment.authMechanisms.length}`);
+        console.log(`External Dependencies: ${assessment.externalDependencies.length}`);
+      } else {
+        // Quick assessment (rules-only)
+        console.log(`Application Type: ${assessment.applicationType}`);
+        console.log(`Frameworks: ${assessment.frameworks.join(', ')}`);
+        console.log(`Entry Points: ${assessment.entryPoints.length}`);
+        console.log(`Data Flows: ${assessment.dataFlows.length}`);
+        console.log(`Files Analyzed: ${assessment.filesAnalyzed}`);
+        console.log(`Lines of Code: ${assessment.linesOfCode}`);
+      }
       console.log('\n✅ SECURITY.md generated successfully!');
 
     } catch (error) {

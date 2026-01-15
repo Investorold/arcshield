@@ -1,10 +1,24 @@
 /**
  * GitHub OAuth Authentication
+ *
+ * REQUIRED Environment Variables:
+ * - GITHUB_CLIENT_ID: Your GitHub OAuth App Client ID
+ * - GITHUB_CLIENT_SECRET: Your GitHub OAuth App Client Secret
+ * - GITHUB_REDIRECT_URI: OAuth callback URL (e.g., https://yourdomain.com/api/auth/github/callback)
  */
 
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23lizuM9JUg3oCeLUK';
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '8f3c73b41451d49d99f89f210f29f3914986eb43';
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 const GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3501/api/auth/github/callback';
+
+// Validate required env vars at startup
+if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+  console.error('FATAL: Missing required GitHub OAuth credentials.');
+  console.error('Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables.');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+}
 
 export interface GitHubUser {
   id: number;
@@ -27,16 +41,23 @@ export interface GitHubRepo {
 
 /**
  * Get GitHub OAuth authorization URL
+ * @returns Object with URL and state for CSRF verification
  */
-export function getGitHubAuthUrl(): string {
+export function getGitHubAuthUrl(): { url: string; state: string } {
+  // Use cryptographically secure random state for CSRF protection
+  const state = crypto.randomUUID();
+
   const params = new URLSearchParams({
-    client_id: GITHUB_CLIENT_ID,
+    client_id: GITHUB_CLIENT_ID!,
     redirect_uri: GITHUB_REDIRECT_URI,
     scope: 'repo read:user',
-    state: Math.random().toString(36).substring(7),
+    state,
   });
 
-  return `https://github.com/login/oauth/authorize?${params}`;
+  return {
+    url: `https://github.com/login/oauth/authorize?${params}`,
+    state,
+  };
 }
 
 /**

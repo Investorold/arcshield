@@ -41,6 +41,9 @@ const sessions: Map<string, {
   repos?: GitHubRepo[];
 }> = new Map();
 
+// Pending OAuth states for CSRF verification (expire after 10 minutes)
+const pendingOAuthStates: Map<string, number> = new Map();
+
 // ============================================
 // WALLET TRIAL TRACKING
 // ============================================
@@ -317,8 +320,32 @@ function rateLimitMiddleware(req: express.Request, res: express.Response, next: 
 // END RATE LIMITING
 // ============================================
 
+// CORS Configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:3500', 'http://localhost:5173'];
+
+if (process.env.FRONTEND_URL && !allowedOrigins.includes(process.env.FRONTEND_URL)) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked request from: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.raw({ type: 'application/zip', limit: '50mb' }));
 
@@ -1531,8 +1558,20 @@ app.get('/api/pricing', (_req, res) => {
  * GET /api/auth/github - Start OAuth flow
  */
 app.get('/api/auth/github', (_req, res) => {
-  const authUrl = getGitHubAuthUrl();
-  res.json({ url: authUrl });
+  // Clean up expired states (older than 10 minutes)
+  const now = Date.now();
+  for (const [state, timestamp] of pendingOAuthStates.entries()) {
+    if (now - timestamp > 10 * 60 * 1000) {
+      pendingOAuthStates.delete(state);
+    }
+  }
+
+  const { url, state } = getGitHubAuthUrl();
+
+  // Store state for CSRF verification
+  pendingOAuthStates.set(state, now);
+
+  res.json({ url });
 });
 
 /**
@@ -1540,11 +1579,20 @@ app.get('/api/auth/github', (_req, res) => {
  */
 app.get('/api/auth/github/callback', async (req, res) => {
   try {
-    const { code } = req.query;
+    const { code, state } = req.query;
 
     if (!code || typeof code !== 'string') {
-      return res.redirect('${FRONTEND_URL}/scan?error=no_code');
+      return res.redirect(`${FRONTEND_URL}/scan?error=no_code`);
     }
+
+    // Verify CSRF state
+    if (!state || typeof state !== 'string' || !pendingOAuthStates.has(state)) {
+      console.warn('[OAuth] Invalid or missing state parameter - possible CSRF attack');
+      return res.redirect(`${FRONTEND_URL}/scan?error=invalid_state`);
+    }
+
+    // Remove used state (one-time use)
+    pendingOAuthStates.delete(state);
 
     // Exchange code for token
     const accessToken = await exchangeCodeForToken(code);
@@ -1552,8 +1600,8 @@ app.get('/api/auth/github/callback', async (req, res) => {
     // Get user info
     const user = await getGitHubUser(accessToken);
 
-    // Generate session ID
-    const sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    // Generate cryptographically secure session ID
+    const sessionId = crypto.randomUUID();
 
     // Store session
     sessions.set(sessionId, { accessToken, user });
