@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Check, CheckCircle } from 'lucide-react';
 import type { Vulnerability, ArcVulnerability, Severity } from '../types';
+import { useVulnFilters } from '../hooks/useVulnFilters';
+import { usePagination } from '../hooks/usePagination';
+import VulnFilterBar from './VulnFilters/VulnFilterBar';
+import CommandPalette, { type CommandFilter } from './common/CommandPalette';
+import Pagination from './common/Pagination';
 
 interface VulnTableProps {
   vulnerabilities: (Vulnerability | ArcVulnerability)[];
   title?: string;
+  showFilters?: boolean;
+  pageSize?: number;
 }
 
 const SEVERITY_CONFIG: Record<Severity, { color: string; bg: string; label: string }> = {
@@ -37,7 +45,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30'
       }`}
     >
-      {copied ? '✓ Copied!' : label}
+      {copied ? <><Check className="w-4 h-4 inline mr-1" /> Copied!</> : label}
     </button>
   );
 }
@@ -197,14 +205,82 @@ Please provide:
   );
 }
 
-export default function VulnTable({ vulnerabilities, title = 'Vulnerabilities' }: VulnTableProps) {
+export default function VulnTable({
+  vulnerabilities,
+  title = 'Vulnerabilities',
+  showFilters = true,
+  pageSize: initialPageSize = 25,
+}: VulnTableProps) {
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // Filtering hook
+  const {
+    filters,
+    sortConfig,
+    filteredVulns,
+    totalCount,
+    filteredCount,
+    severityCounts,
+    setSearch,
+    toggleSeverity,
+    setSeverities,
+    setIsThirdParty,
+    setFilePath,
+    setSort,
+    resetFilters,
+    applyPreset,
+    hasActiveFilters,
+  } = useVulnFilters(vulnerabilities);
+
+  // Pagination hook
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    paginatedItems,
+    goToPage,
+    setPageSize,
+  } = usePagination(filteredVulns, { initialPageSize });
+
+  // Global Cmd+K listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Handle command palette filter
+  const handleCommandFilter = useCallback((filter: CommandFilter) => {
+    switch (filter.type) {
+      case 'severity':
+        setSeverities([filter.value as Severity]);
+        break;
+      case 'search':
+        setSearch(filter.value as string);
+        break;
+      case 'ownership':
+        setIsThirdParty(filter.value as boolean);
+        break;
+      case 'file':
+        setFilePath(filter.value as string);
+        break;
+    }
+  }, [setSeverities, setSearch, setIsThirdParty, setFilePath]);
+
+  // Empty state (no vulnerabilities at all)
   if (vulnerabilities.length === 0) {
     return (
       <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-6">
         <h3 className="text-lg font-semibold mb-4">{title}</h3>
         <div className="flex items-center justify-center py-8 bg-green-900/10 rounded-lg border border-green-500/20">
           <div className="text-center">
-            <div className="text-4xl mb-2">✓</div>
+            <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-2" aria-hidden="true" />
             <p className="text-green-400 font-medium">No vulnerabilities found</p>
           </div>
         </div>
@@ -214,28 +290,86 @@ export default function VulnTable({ vulnerabilities, title = 'Vulnerabilities' }
 
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
+      {/* Header with title */}
       <div className="p-4 border-b border-gray-700">
         <h3 className="text-lg font-semibold">{title}</h3>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-700/50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Severity</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Title</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Location</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">CWE</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-8"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700">
-            {vulnerabilities.map((vuln) => (
-              <VulnRow key={vuln.id} vuln={vuln} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+      {/* Filter Bar */}
+      {showFilters && (
+        <div className="p-4 border-b border-gray-700 bg-gray-800/50">
+          <VulnFilterBar
+            filters={filters}
+            sortConfig={sortConfig}
+            severityCounts={severityCounts}
+            totalCount={totalCount}
+            filteredCount={filteredCount}
+            hasActiveFilters={hasActiveFilters}
+            onSearchChange={setSearch}
+            onToggleSeverity={toggleSeverity}
+            onSetThirdParty={setIsThirdParty}
+            onSetFilePath={setFilePath}
+            onSortChange={setSort}
+            onApplyPreset={applyPreset}
+            onResetFilters={resetFilters}
+            onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          />
+        </div>
+      )}
+
+      {/* Table or empty filtered state */}
+      {filteredCount === 0 ? (
+        <div className="p-8 text-center">
+          <p className="text-gray-400 mb-4">No vulnerabilities match your filters.</p>
+          <button
+            onClick={resetFilters}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+          >
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-700/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Severity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Location</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">CWE</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {paginatedItems.map((vuln) => (
+                  <VulnRow key={vuln.id} vuln={vuln} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={filteredCount}
+              onPageChange={goToPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
+        </>
+      )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onApplyFilter={handleCommandFilter}
+      />
     </div>
   );
 }
